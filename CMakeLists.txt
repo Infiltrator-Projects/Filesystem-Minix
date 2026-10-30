@@ -33,6 +33,14 @@ if(BUILD_TESTING)
  target_include_directories(minix-defrag-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
  target_link_libraries(minix-defrag-test PRIVATE minix-driver)
  add_test(NAME minix-defrag-interface COMMAND minix-defrag-test)
+ add_executable(minix-native-test
+   tests/test_minix_native.c native/minix_native.c tests/generic_test_io.c)
+ target_include_directories(minix-native-test PRIVATE
+   "${CMAKE_CURRENT_SOURCE_DIR}/native"
+   "${CMAKE_CURRENT_SOURCE_DIR}/compat")
+ target_compile_definitions(minix-native-test PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
+ target_link_libraries(minix-native-test PRIVATE InfiltratrCommon::Common)
+ add_test(NAME minix-original-native-and-fixtures COMMAND minix-native-test)
  add_executable(minix-v1-v2-module-test tests/minix_dropin_module_test.c
    native/filesystems/minix/module/minix_module.c)
  target_include_directories(minix-v1-v2-module-test PRIVATE
