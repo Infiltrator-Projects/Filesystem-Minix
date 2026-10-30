@@ -1,0 +1,24 @@
+name: Build combined Minix filesystem SO
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  minix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile canonical MINIX.so
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --parallel 2
+      - name: Verify old filesystem API and new Defrag API
+        run: |
+          ctest --test-dir build-cmake --output-on-failure
+          test -f build-cmake/MINIX.so
+          nm -D build-cmake/MINIX.so | grep -F infiltrator_filesystem_module_v2
+          nm -D build-cmake/MINIX.so | grep -F infiltrator_filesystem_minix_defrag_v1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MINIX-combined-so
+          path: build-cmake/MINIX.so
