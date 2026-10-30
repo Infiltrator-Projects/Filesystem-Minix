@@ -1,0 +1,16 @@
+name: Filesystem SO build and regression
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone filesystem shared object and run regression
+        run: make test
