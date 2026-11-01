@@ -22,3 +22,14 @@ jobs:
         with:
           name: MINIX-combined-so
           path: build-cmake/MINIX.so
+      - name: Verify exactly one PDF per runtime SO
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          DESTDIR="$stage" cmake --install build-cmake
+          test "$(find "$stage" -type f | wc -l)" -eq 2
+          test -f "$stage/System/Filesystems/MINIX.so"
+          test -f "$stage/System/Resources/Documentation/Filesystem-Minix/Minix.pdf"
+          test "$(head -c 5 "$stage/System/Resources/Documentation/Filesystem-Minix/Minix.pdf")" = '%PDF-'
