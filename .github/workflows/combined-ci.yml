@@ -21,7 +21,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: MINIX-combined-so
-          path: build-cmake/MINIX.so
+          path: |
+            build-cmake/MINIX.so
+            docs/Minix.pdf
       - name: Verify exactly one PDF per runtime SO
         shell: bash
         run: |
