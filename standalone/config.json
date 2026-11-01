@@ -1,0 +1,7 @@
+{
+  "repository": "Filesystem-Minix",
+  "module": "MINIX.so",
+  "pdf": "docs/Minix.pdf",
+  "abi": "infiltrator_filesystem_minix_defrag_v1",
+  "build_system": "cmake"
+}
