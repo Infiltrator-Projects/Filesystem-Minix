@@ -33,5 +33,5 @@ jobs:
           DESTDIR="$stage" cmake --install build-cmake
           test "$(find "$stage" -type f | wc -l)" -eq 2
           test -f "$stage/System/Filesystems/MINIX.so"
-          test -f "$stage/System/Resources/Documentation/Filesystem-Minix/Minix.pdf"
-          test "$(head -c 5 "$stage/System/Resources/Documentation/Filesystem-Minix/Minix.pdf")" = '%PDF-'
+          test -f "$stage/System/Resources/Documentation/Filesystem-Minix.pdf"
+          test "$(head -c 5 "$stage/System/Resources/Documentation/Filesystem-Minix.pdf")" = '%PDF-'

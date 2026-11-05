@@ -53,4 +53,4 @@ endif()
 install(TARGETS minix-driver LIBRARY DESTINATION /System/Filesystems)
 # Runtime payload: one filesystem shared object and its single PDF manual.
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/docs/Minix.pdf"
-        DESTINATION /System/Resources/Documentation/Filesystem-Minix)
+        DESTINATION /System/Resources/Documentation RENAME Filesystem-Minix.pdf)
