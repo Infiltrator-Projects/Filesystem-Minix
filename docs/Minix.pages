@@ -155,3 +155,53 @@ BT /F1 7.7 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 512.0 Tm (https://code.googlesource.c
 BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 483.0 Tm (The InfiltratorOS shared-object module, optional kernel adapter, native builder and) Tj ET
 BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 466.0 Tm (release-specific tests are a separate implementation. A successful document build or) Tj ET
 BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 449.0 Tm (package installation does not qualify physical writes, recovery, kernel mounting or boot.) Tj ET
+%%Page
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+0.75 0.82 0.85 RG .7 w 50 49 m 545 49 l S
+BT /F2 9 Tf 0.62 0.88 0.91 rg 1 0 0 1 50 800 Tm (INFILTRATOR / ORIGINAL FILESYSTEM ENGINEERING APPENDIX) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 770 Tm (Minix / engineering detail) Tj ET
+BT /F1 8 Tf 0.3 0.39 0.42 rg 1 0 0 1 50 34 Tm (Original format research; consult primary references for normative fields) Tj ET
+BT /F1 8 Tf 0.3 0.39 0.42 rg 1 0 0 1 509 34 Tm (PAGE 09) Tj ET
+BT /F2 13.5 Tf 0.02 0.44 0.50 rg 1 0 0 1 50 710 Tm (DISK READ PATH / ENGINEERING NOTES) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 678 Tm (1. Read the Minix superblock and distinguish V1, V2 and V3 by the recorded magic and) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 661.5 Tm (supported block-size information.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 635 Tm (2. Resolve inode and zone bitmap placement from the superblock. Inode allocation and) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 618.5 Tm (data-zone allocation use separate bitmaps.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 592 Tm (3. Locate the inode table after the bitmap regions using the filesystem version's inode) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 575.5 Tm (size and structural definitions.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 549 Tm (4. Minix V1 inodes use smaller zone-address fields than V2 and V3. The latter support) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 532.5 Tm (wider zone pointers and different indirect-addressing capacity.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 506 Tm (5. Follow seven direct zone references and the appropriate indirect levels for that) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 489.5 Tm (version. A zone may consist of more than one physical block in some historical layouts.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 463 Tm (6. Decode fixed-format directory entries according to the version's name-length and) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 446.5 Tm (record-layout rules rather than presuming ext-style variable records.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 420 Tm (7. Locate inode one as the root directory in the conventional Minix on-disk format.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 403.5 Tm (Verify its directory type and zone mappings before traversal.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 377 Tm (8. Keep the educational V1 design, later V2 expansion and Minix 3-era changes separate) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 360.5 Tm (when describing historical limits.) Tj ET
+%%Page
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+0.75 0.82 0.85 RG .7 w 50 49 m 545 49 l S
+BT /F2 9 Tf 0.62 0.88 0.91 rg 1 0 0 1 50 800 Tm (INFILTRATOR / ORIGINAL FILESYSTEM ENGINEERING APPENDIX) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 770 Tm (Minix / engineering detail) Tj ET
+BT /F1 8 Tf 0.3 0.39 0.42 rg 1 0 0 1 50 34 Tm (Original format research; consult primary references for normative fields) Tj ET
+BT /F1 8 Tf 0.3 0.39 0.42 rg 1 0 0 1 509 34 Tm (PAGE 10) Tj ET
+BT /F2 13.5 Tf 0.02 0.44 0.50 rg 1 0 0 1 50 710 Tm (VALIDATION, RECOVERY AND COMPATIBILITY) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 678 Tm (1. Validate that inode and zone bitmap sizes cover the declared objects; a superblock) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 661.5 Tm (whose maps are too small cannot be safely interpreted.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 635 Tm (2. Check first-data-zone, zone size, block size and total-zone counts together;) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 618.5 Tm (arithmetic errors can place data reads inside the inode table.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 592 Tm (3. Verify all direct and indirect zone references against valid data zones and detect) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 575.5 Tm (loops or multiply owned allocation units.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 549 Tm (4. Do not cast a V1 inode to a V2/V3 inode structure; differing field sizes can corrupt) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 532.5 Tm (timestamps, ownership and data pointers.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 506 Tm (5. Handle directory-entry name fields as bounded on-media byte arrays with) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 489.5 Tm (version-specific lengths and termination rules.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 463 Tm (6. Cross-check inode bitmap state, link counts and reachable directory records before) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 446.5 Tm (reclaiming apparent orphaned inodes.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 420 Tm (7. Distinguish Minix disk format metadata from the capabilities of a contemporary Linux) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 403.5 Tm (driver, which may not support every historical zone-size combination.) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 377 Tm (8. Preserve the original superblock and bitmap regions when diagnosing corruption;) Tj ET
+BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 360.5 Tm (rebuilding maps without traversing the namespace may destroy evidence.) Tj ET
