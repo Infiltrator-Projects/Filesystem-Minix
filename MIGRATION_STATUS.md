@@ -1,10 +1,7 @@
-# Minix Defragmenter integration
-MINIX.so now builds both the existing Minix V1/V2/V3 read-only/existing-file
-overwrite interface (V1/V2) and the imported independent Defragmenter native
-mutation, journal/recover and Test Media implementation, through a shared
-format-neutral host ABI.
+# Minix source consolidation — 6 November 2026
 
-The former freestanding Makefile build remains for compatibility verification,
-but release consumers must build and install the canonical combined CMake
-MINIX.so rather than use the limited old module. Defragmenter integration and
-end-to-end tests are required before deleting its original native code.
+All 14 canonical Minix source files in the central `Filesystems` main source tree at `a253fb724ce1fd760a361219281effb6abd71367` are now represented in this independent repository. Its original 3 matching Minix source files were byte-identical and preserved; the other 11 original Linux VFS source files were imported verbatim with source attribution retained.
+
+`standalone/kernel.json` now uses this repository's own `native/filesystems/minix` tree rather than downloading a pinned historical Filesystems revision. The `.so` module continues to use the repository's original canonical engine and regression suite; `minix.ko` is built locally from its source in this repository.
+
+This is source-ownership consolidation, not proof of full runtime qualification. Continue independently checking the Linux module's ABI, disposable-media read/write/remount tests and native RUN package output. Do not remove the central tree until Filesystems' consumers and CI are detached and their replacement build passes.
