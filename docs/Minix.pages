@@ -1,62 +1,157 @@
-0.06 0.12 0.20 rg 0 744 595 98 re f
-0.02 0.58 0.60 rg 48 741 87 4 re f
-BT /F2 12 Tf 0.65 0.87 0.91 rg 1 0 0 1 48 801 Tm (INFILTRATOR / FILESYSTEMS) Tj ET
-BT /F2 20 Tf 1 1 1 rg 1 0 0 1 48 771 Tm (Minix - format and project guide) Tj ET
-0.94 0.97 0.97 rg 48 674 498 46 re f
-BT /F2 14 Tf 0.02 0.42 0.47 rg 1 0 0 1 61 699 Tm (FILESYSTEM BUILD GUIDE) Tj ET
-BT /F1 10 Tf 0.07 0.14 0.24 rg 1 0 0 1 61 683 Tm (Portable Debian package and locally compiled native installer.) Tj ET
-BT /F2 14 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 642 Tm (WHAT IS IT?) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 49 615 Tm (Small Unix-style filesystem originally associated with MINIX; layout varies) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 49 596 Tm (by format revision.) Tj ET
-BT /F2 13 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 549 Tm (CONCEPTUAL ON-DISK STRUCTURE) Tj ET
-BT /F1 10 Tf 0.35 0.42 0.47 rg 1 0 0 1 48 526 Tm (Format-specific structures vary; this is not a sector map.) Tj ET
-0.06 0.44 0.49 rg 48 445 116 62 re f
-BT /F2 11 Tf 1 1 1 rg 1 0 0 1 60 478 Tm (MEDIA) Tj ET
-BT /F1 9 Tf 0.9 0.96 0.97 rg 1 0 0 1 60 459 Tm (stage 1) Tj ET
-0.09 0.52 0.56 rg 175 445 116 62 re f
-BT /F2 11 Tf 1 1 1 rg 1 0 0 1 187 478 Tm (METADATA) Tj ET
-BT /F1 9 Tf 0.9 0.96 0.97 rg 1 0 0 1 187 459 Tm (stage 2) Tj ET
-0.12 0.62 0.57 rg 302 445 116 62 re f
-BT /F2 11 Tf 1 1 1 rg 1 0 0 1 314 478 Tm (ALLOCATION) Tj ET
-BT /F1 9 Tf 0.9 0.96 0.97 rg 1 0 0 1 314 459 Tm (stage 3) Tj ET
-0.16 0.42 0.53 rg 429 445 116 62 re f
-BT /F2 11 Tf 1 1 1 rg 1 0 0 1 441 478 Tm (PAYLOAD) Tj ET
-BT /F1 9 Tf 0.9 0.96 0.97 rg 1 0 0 1 441 459 Tm (stage 4) Tj ET
-BT /F2 14 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 406 Tm (SOURCE AND QUALIFICATION) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 49 381 Tm (Filesystem-Minix has an independent Infiltrator-Projects source repository.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 49 362 Tm (The Debian package records the source revision and payload checksums.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 49 343 Tm (Driver capabilities and media compatibility are described in the source) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 49 324 Tm (qualification reports.) Tj ET
-BT /F2 14 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 288 Tm (TARGET INSTALLATION LAYOUT) Tj ET
-0.94 0.97 0.97 rg 48 183 498 86 re f
-BT /F1 10 Tf 0.07 0.14 0.24 rg 1 0 0 1 62 247 Tm (/System/Filesystems/MINIX.so) Tj ET
-BT /F1 10 Tf 0.07 0.14 0.24 rg 1 0 0 1 62 225 Tm (/System/Resources/Documentation/) Tj ET
-BT /F2 11 Tf 0.02 0.48 0.52 rg 1 0 0 1 62 204 Tm (Minix.pdf) Tj ET
-BT /F1 10 Tf 0.35 0.42 0.47 rg 1 0 0 1 48 149 Tm (The installation page gives the exact packaged file paths.) Tj ET
-BT /F1 10 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 101 Tm (Engineering source and qualification reports belong in GitHub.) Tj ET
-0.82 0.85 0.86 rg 48 61 500 1 re f
-BT /F1 9 Tf 0.34 0.39 0.43 rg 1 0 0 1 48 40 Tm (Filesystem-Minix  |  Preliminary user guide  |  30 October 2026) Tj ET
-
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 01) Tj ET
+BT /F2 12 Tf 0.02 0.50 0.56 rg 1 0 0 1 50 690.0 Tm (HISTORY / ORIGINAL DESIGN / DISK FORMAT) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 655.0 Tm (A deliberately simple inode-and-zone disk format that evolved across MINIX V1, V2 and V3) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 638.0 Tm (for teaching and compact operating systems.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 609.0 Tm (This is a technical reference to the upstream filesystem's historical design, not an) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 592.0 Tm (installer manual. The format's on-media semantics are distinct from the independent) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 575.0 Tm (InfiltratorOS module, its APIs and any Linux kernel adapter.) Tj ET
+BT /F2 12 Tf 0.02 0.50 0.56 rg 1 0 0 1 50 546.0 Tm (CONCEPTUAL MEDIA MAP) Tj ET
+0.040 0.360 0.470 rg 50 463 239 67 re f
+BT /F2 11 Tf 1 1 1 rg 1 0 0 1 61 495.0 Tm (BOOT/SUPERBLOCK) Tj ET
+BT /F1 8.5 Tf 0.86 0.96 0.97 rg 1 0 0 1 61 476.0 Tm (Version magic and geometry) Tj ET
+0.065 0.395 0.495 rg 301 463 239 67 re f
+BT /F2 11 Tf 1 1 1 rg 1 0 0 1 312 495.0 Tm (INODE BITMAP) Tj ET
+BT /F1 8.5 Tf 0.86 0.96 0.97 rg 1 0 0 1 312 476.0 Tm (Allocated inode identifiers) Tj ET
+0.090 0.430 0.520 rg 50 381 239 67 re f
+BT /F2 11 Tf 1 1 1 rg 1 0 0 1 61 413.0 Tm (ZONE BITMAP) Tj ET
+BT /F1 8.5 Tf 0.86 0.96 0.97 rg 1 0 0 1 61 394.0 Tm (Data-zone ownership) Tj ET
+0.115 0.465 0.545 rg 301 381 239 67 re f
+BT /F2 11 Tf 1 1 1 rg 1 0 0 1 312 413.0 Tm (INODE + DATA) Tj ET
+BT /F1 8.5 Tf 0.86 0.96 0.97 rg 1 0 0 1 312 394.0 Tm (Direct/indirect zone mapping) Tj ET
+BT /F2 12 Tf 0.02 0.50 0.56 rg 1 0 0 1 50 340.0 Tm (CONTENTS) Tj ET
+BT /F1 10.6 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 313.0 Tm (1. Historical chronology) Tj ET
+BT /F1 10.6 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 290.0 Tm (2. Original on-disk architecture) Tj ET
+BT /F1 10.6 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 267.0 Tm (3. Allocation and directories) Tj ET
+BT /F1 10.6 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 244.0 Tm (4. Integrity and recovery) Tj ET
+BT /F1 10.6 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 221.0 Tm (5. Design rationale and limitations) Tj ET
+BT /F1 10.6 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 198.0 Tm (6. InfiltratorOS integration boundary) Tj ET
 %%Page
-0.06 0.12 0.20 rg 0 744 595 98 re f
-BT /F2 20 Tf 1 1 1 rg 1 0 0 1 48 778 Tm (Build and installation) Tj ET
-BT /F2 14 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 700 Tm (Filesystem-Minix) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 673 Tm (Release @VERSION@) Tj ET
-BT /F2 13 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 620 Tm (Installed files) Tj ET
-BT /F3 8 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 591 Tm (/System/Filesystems/MINIX.so) Tj ET
-BT /F3 8 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 568 Tm (/System/Resources/Documentation/Filesystem-Minix.pdf) Tj ET
-BT /F3 8 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 545 Tm (/System/Kernel/Filesystems/minix.ko) Tj ET
-BT /F2 13 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 475 Tm (Debian package) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 450 Tm (Install the prebuilt files with dpkg -i followed by the Debian filename.) Tj ET
-BT /F2 13 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 400 Tm (Manual RUN) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 375 Tm (Run bash followed by the native installer filename.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 353 Tm (The installer compiles the shared object and generates this manual locally.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 331 Tm (It also compiles the Linux adapter against the running kernel headers.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 309 Tm (Use --kernel-build DIRECTORY to select another prepared kernel build.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 287 Tm (The manual installer replaces all three files.) Tj ET
-BT /F2 13 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 239 Tm (InfiltratorOS installation) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 214 Tm (The OS installer builds a missing or older shared object.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 192 Tm (It verifies the manual independently and repairs it from its matching release.) Tj ET
-BT /F1 11 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 170 Tm (The kernel module is stored for manual use under its single filename.) Tj ET
-BT /F1 10 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 110 Tm (The package metadata records the source revision and SHA-256 checksums.) Tj ET
-BT /F1 9 Tf 0.07 0.14 0.24 rg 1 0 0 1 48 40 Tm (Filesystem-Minix | Build guide | @VERSION@) Tj ET
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 02) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (HISTORICAL CHRONOLOGY) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (Andrew S. Tanenbaum created MINIX in the 1980s as an educational Unix-like operating system) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (for teaching operating-system design. Its filesystem was deliberately small and) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (inspectable, with inodes and data zones rather than a complex journal or pooled allocator.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (The original design also influenced the early Linux period, when Linux initially supported) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 611.0 Tm (MINIX media before ext-family filesystems superseded it.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 582.0 Tm (MINIX disk formats evolved through V1, V2 and V3. The revisions expanded directory name) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 565.0 Tm (lengths and representable zone addresses, while retaining a general Unix-like) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 548.0 Tm (directory-to-inode model. A document that describes only one MINIX version is insufficient) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 531.0 Tm (for identifying an arbitrary source image.) Tj ET
+%%Page
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 03) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (ORIGINAL ON-DISK ARCHITECTURE) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (The volume contains boot area, superblock, inode bitmap, zone bitmap, inode table and data) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (zones. The superblock identifies version-dependent magic, inode count, zone count, bitmap) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (block counts, first data zone, log-zone size and size limits. MINIX V1 inodes use smaller) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (zone addresses than later revisions, and V3 uses a distinct superblock representation.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 599.0 Tm (Zones are the units through which file data is allocated, while block I/O can be a separate) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 582.0 Tm (granularity. Direct pointers address initial zones, with single and double indirect) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 565.0 Tm (mappings extending larger files. Linux kernel source demonstrates separate handling for V1,) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 548.0 Tm (V2 and V3 geometry and guards against unsupported zone-size combinations.) Tj ET
+%%Page
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 04) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (ALLOCATION AND DIRECTORIES) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (The inode bitmap identifies used inodes, and the zone bitmap tracks allocated data regions.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (Directories map names to inode numbers through fixed-layout version-specific entries.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (Original V1 name variants permitted short directory names, while later versions increased) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (name capacity. Record width must be selected from the actual format variant; treating a V1) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 611.0 Tm (directory as V3 misaligns every following entry.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 582.0 Tm (File size and zone pointers must be checked against declared geometry and file-block) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 565.0 Tm (coverage. Hard links affect inode reference counts independently of data-zone ownership.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 548.0 Tm (Sparse-file or indirect-block behaviour, where permitted, must be validated with the exact) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 531.0 Tm (version and system implementation.) Tj ET
+%%Page
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 05) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (INTEGRITY AND RECOVERY) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (Traditional MINIX filesystems do not have a full metadata journal or native copy-on-write) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (snapshots. Offline checks compare inode and zone bitmaps with the reachable directory graph) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (and inode pointers. A crash may leave a bitmap entry set for an unreachable zone, or an) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (inode referencing a zone not marked allocated. Both directions must be checked before any) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 611.0 Tm (repair decision.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 582.0 Tm (The superblock magic is only the first stage of format validation. A safe reader then) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 565.0 Tm (verifies bitmap capacity, first data zone, inode bounds and indirect-pointer ranges, and) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 548.0 Tm (refuses unsupported feature combinations. Guessing format based on the filename or copying) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 531.0 Tm (only the superblock to repair an image is unsafe.) Tj ET
+%%Page
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 06) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (DESIGN RATIONALE AND LIMITATIONS) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (MINIX optimised pedagogical clarity and compact code rather than massive filesystem size or) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (high-concurrency workloads. Its simple separation between inode and zone bitmaps makes) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (allocation easy to explain and implement. This is historically important in the development) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (of educational and early Linux systems.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 599.0 Tm (The price was restricted name lengths, file sizes and lack of journalling. Version-specific) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 582.0 Tm (constraints matter more than a single aggregate MINIX capacity figure. Newer) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 565.0 Tm (implementations sometimes interpret the same concepts with more robust validation, but that) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 548.0 Tm (should not be projected back onto original MINIX V1 media.) Tj ET
+%%Page
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 07) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (INFILTRATOROS INTEGRATION BOUNDARY) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (MINIX.so is an independent portable implementation with a restricted supported operation) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (set. Its source and tests must separately demonstrate V1/V2/V3 identification and writing) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (or recovery behaviour. A read-only module does not become a production writable driver) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (simply because the historical filesystem supports writing.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 599.0 Tm (The MINIX teaching-system source and Linux kernel's parser are the appropriate references) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 582.0 Tm (for version magic, geometry and inode addressing. The optional Linux kernel adapter) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 565.0 Tm (requires separate boot/mount and failure-recovery qualification.) Tj ET
+%%Page
+0.06 0.13 0.22 rg 0 750 595 92 re f
+0.03 0.53 0.58 rg 50 747 120 4 re f
+0.7 0.8 0.85 RG 0.7 w 50 50 m 545 50 l S
+BT /F2 9 Tf 0.60 0.85 0.90 rg 1 0 0 1 50 803.0 Tm (INFILTRATOR / ORIGINAL FILESYSTEM TECHNICAL REFERENCE) Tj ET
+BT /F2 19 Tf 1 1 1 rg 1 0 0 1 50 774.0 Tm (MINIX - teaching and Unix filesystem) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 50 34.0 Tm (Filesystem-Minix | Format history, physical design and references) Tj ET
+BT /F1 8 Tf 0.33 0.40 0.44 rg 1 0 0 1 509 34.0 Tm (PAGE 08) Tj ET
+BT /F2 14 Tf 0.01 0.43 0.49 rg 1 0 0 1 50 713.0 Tm (SOURCES AND PRIMARY REFERENCES) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 679.0 Tm (The documents below are the historical and engineering reference points used for this) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 662.0 Tm (guide. Where an on-media field or feature flag is ambiguous, consult the original format) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 645.0 Tm (documentation and its version-specific implementation notes before interpreting or changing) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 628.0 Tm (media.) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 599.0 Tm (1. MINIX 3 original source-code appendix and filesystem constants) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 570.0 Tm (https://www.minix3.org/documentation/AppendixB.pdf) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 541.0 Tm (2. Linux kernel MINIX filesystem source and geometry validation) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 512.0 Tm (https://code.googlesource.com/linux/torvalds/linux/+/7acf90feab8b009fde7def08ff2c622d0f10e99f/fs/minix/inode.c) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 483.0 Tm (The InfiltratorOS shared-object module, optional kernel adapter, native builder and) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 466.0 Tm (release-specific tests are a separate implementation. A successful document build or) Tj ET
+BT /F1 10.15 Tf 0.08 0.15 0.24 rg 1 0 0 1 50 449.0 Tm (package installation does not qualify physical writes, recovery, kernel mounting or boot.) Tj ET
