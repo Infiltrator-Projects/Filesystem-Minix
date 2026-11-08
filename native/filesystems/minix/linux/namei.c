@@ -147,7 +147,7 @@ static int minix_unlink(struct inode * dir, struct dentry *dentry)
 
 	/* Refuse metadata mutation when an inode's link count is corrupt. */
 	if (inode->i_nlink == 0)
-		return -EFSCORRUPTED;
+		return -EUCLEAN;
 
 	de = minix_find_entry(dentry, &folio);
 	if (!de)
@@ -169,7 +169,7 @@ static int minix_rmdir(struct inode * dir, struct dentry *dentry)
 
 	/* Removing a child directory decrements its parent's nlink. */
 	if (dir->i_nlink <= 2)
-		return -EFSCORRUPTED;
+		return -EUCLEAN;
 
 	if (minix_empty_dir(inode)) {
 		err = minix_unlink(dir, dentry);
@@ -217,7 +217,7 @@ static int minix_rename(struct mnt_idmap *idmap,
 			goto out_dir;
 
 		/* Guard against link-count underflow before replacing an inode. */
-		err = -EFSCORRUPTED;
+		err = -EUCLEAN;
 		if (new_inode->i_nlink == 0 ||
 		    (dir_de && new_inode->i_nlink != 2))
 			goto out_dir;

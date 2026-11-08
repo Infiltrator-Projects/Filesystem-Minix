@@ -247,8 +247,9 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode)
 	j += i * bits_per_zone;
 	if (!j || j > sbi->s_ninodes) {
 		iput(inode);
-		/* An allocated bitmap bit outside the inode range is corruption. */
-		return ERR_PTR(-EFSCORRUPTED);
+		/* An allocated bitmap bit outside the inode range is corruption.
+		 * EUCLEAN is available in the pinned Linux 6.12 kernel too. */
+		return ERR_PTR(-EUCLEAN);
 	}
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 	inode->i_ino = j;
