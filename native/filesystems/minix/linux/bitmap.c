@@ -247,7 +247,8 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode)
 	j += i * bits_per_zone;
 	if (!j || j > sbi->s_ninodes) {
 		iput(inode);
-		return ERR_PTR(-ENOSPC);
+		/* An allocated bitmap bit outside the inode range is corruption. */
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 	inode->i_ino = j;
