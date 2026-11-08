@@ -272,7 +272,10 @@ static int minix_fill_super(struct super_block *s, struct fs_context *fc)
 		sbi->s_namelen = 60;
 		sbi->s_version = MINIX_V3;
 		sbi->s_mount_state = MINIX_VALID_FS;
-		sb_set_blocksize(s, m3s->s_blocksize);
+		/* Reject corrupt or unsupported Minix V3 sector geometry.
+		 * Continuing with the previous block size misinterprets inode maps. */
+		if (!sb_set_blocksize(s, m3s->s_blocksize))
+			goto out_release;
 		s->s_max_links = MINIX2_LINK_MAX;
 	} else
 		goto out_no_fs;
