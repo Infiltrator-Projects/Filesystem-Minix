@@ -1,7 +1,7 @@
 name: Qualify and release portable DEB and CPU-native source RUN
 on:
   push:
-    branches: [main, feature/python-native-packaging-20261101]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:

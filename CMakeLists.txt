@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(FilesystemMinix VERSION 1.0.0 LANGUAGES C)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" MINIX_VERSION)
+string(STRIP "${MINIX_VERSION}" MINIX_VERSION)
+project(FilesystemMinix VERSION "${MINIX_VERSION}" LANGUAGES C)
 include(CTest)
 include(FetchContent)
 find_package(OpenSSL REQUIRED)
@@ -14,7 +16,7 @@ FetchContent_MakeAvailable(infiltratr_common)
 # Common is a link-time dependency; its development files must not be installed
 # by this standalone filesystem package.
 set_property(DIRECTORY "${infiltratr_common_SOURCE_DIR}" PROPERTY EXCLUDE_FROM_ALL TRUE)
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.h" "#define LD_VERSION \"1.0.0\"\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.h" "#define LD_VERSION \"${PROJECT_VERSION}\"\n")
 add_library(minix-driver SHARED native/minix_native.c native/minix_worker.c
  native/filesystems/minix/module/minix_module.c
  compat/legacy_services.c module/minix_defrag_module.c
