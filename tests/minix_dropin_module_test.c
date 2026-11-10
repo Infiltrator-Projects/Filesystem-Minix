@@ -1,8 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Independent synthetic Minix V1/V2/V3 media, bounds and indirect-tree tests. */
 #include "minix_module.h"
+#ifdef IFS_TEST_COMMON_V2
 #include <infiltratr/filesystem_module_v2.h>
 #include <stdlib.h>
+extern const IfsFsModuleApiV1 *infiltrator_filesystem_api_v1(void);
+extern const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void);
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,6 +44,7 @@ static int io_flush(void *u)
     ++flushes;
     return 0;
 }
+#ifdef IFS_TEST_COMMON_V2
 static void *common_alloc(void *ctx, size_t bytes)
 {
     (void)ctx;
@@ -50,6 +55,7 @@ static void common_free(void *ctx, void *p)
     (void)ctx;
     free(p);
 }
+#endif
 static int fail(const char *why) { fprintf(stderr, "MINIX: %s\n", why); return 1; }
 static void inode_init(uint8_t *p, uint32_t version, uint16_t mode,
                        uint32_t bytes, uint32_t first)
@@ -161,6 +167,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         api->lookup(&volume, &root, "hello.txt", 9u, &dent) != 1 ||
         api->lookup(&volume, &root, "wrong", 5u, &dent) != 1)
         return fail("directory lookup mismatch");
+#ifdef IFS_TEST_COMMON_V2
     /* Common ABI is independently exercised on this REAL Minix fixture.
      * Different on-disk Minix versions preserve the same software contract. */
     {
@@ -207,6 +214,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         if (common->unmount(opened) != IFS_FS_OK)
             return fail("Common Minix unmount failed");
     }
+#endif
     if (api->read(&volume, &file, 7u*BS-3u, bytes, 7u) != 0 ||
         memcmp(bytes, "GGGHHHH", 7u) != 0 ||
         api->read(&volume, &file, 9u*BS+4u, bytes, 1u) != 0 ||
