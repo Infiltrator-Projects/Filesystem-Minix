@@ -11,7 +11,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(infiltratr_common GIT_REPOSITORY https://github.com/Infiltrator-Projects/Libraries.git
- GIT_TAG c76ec95ef66fc728df6a906ad75a6a4dd63b419b)
+ GIT_TAG f002d99f5971e6f55aa91b5a245b8307bba6b0ee)
 FetchContent_MakeAvailable(infiltratr_common)
 # Common is a link-time dependency; its development files must not be installed
 # by this standalone filesystem package.
@@ -20,6 +20,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.h" "#define LD_VERSION \"${PROJE
 add_library(minix-driver SHARED native/minix_native.c native/minix_worker.c
  native/filesystems/minix/module/minix_module.c
  compat/legacy_services.c module/minix_defrag_module.c
+ module/minix_common.c
  fixtures/minix_codec.c module/minix_fixture_bridge.c)
 set_source_files_properties(native/minix_worker.c PROPERTIES COMPILE_DEFINITIONS "main=ifs_minix_worker_main")
 set_source_files_properties(fixtures/minix_codec.c PROPERTIES COMPILE_DEFINITIONS "ldtm_raw_minix=ifs_minix_raw_fixture")
@@ -47,9 +48,10 @@ if(BUILD_TESTING)
  target_link_libraries(minix-native-test PRIVATE InfiltratrCommon::Common)
  add_test(NAME minix-original-native-and-fixtures COMMAND minix-native-test)
  add_executable(minix-v1-v2-module-test tests/minix_dropin_module_test.c
-   native/filesystems/minix/module/minix_module.c)
+   native/filesystems/minix/module/minix_module.c module/minix_common.c)
  target_include_directories(minix-v1-v2-module-test PRIVATE
    "${CMAKE_CURRENT_SOURCE_DIR}/native/filesystems/minix/module")
+ target_link_libraries(minix-v1-v2-module-test PRIVATE InfiltratrCommon::Common)
  add_test(NAME minix-original-v1-v2 COMMAND minix-v1-v2-module-test)
 endif()
 install(TARGETS minix-driver LIBRARY DESTINATION /System/Filesystems)
