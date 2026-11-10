@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Independent synthetic Minix V1/V2/V3 media, bounds and indirect-tree tests. */
 #include "minix_module.h"
+#include <infiltratr/filesystem_module_v2.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,6 +39,16 @@ static int io_flush(void *u)
     (void)u;
     ++flushes;
     return 0;
+}
+static void *common_alloc(void *ctx, size_t bytes)
+{
+    (void)ctx;
+    return malloc(bytes);
+}
+static void common_free(void *ctx, void *p)
+{
+    (void)ctx;
+    free(p);
 }
 static int fail(const char *why) { fprintf(stderr, "MINIX: %s\n", why); return 1; }
 static void inode_init(uint8_t *p, uint32_t version, uint16_t mode,
@@ -149,6 +161,52 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         api->lookup(&volume, &root, "hello.txt", 9u, &dent) != 1 ||
         api->lookup(&volume, &root, "wrong", 5u, &dent) != 1)
         return fail("directory lookup mismatch");
+    /* Common ABI is independently exercised on this REAL Minix fixture.
+     * Different on-disk Minix versions preserve the same software contract. */
+    {
+        const IfsFsModuleApiV1 *common = infiltrator_filesystem_api_v1();
+        const IfsFsModuleApiV2 *extension = infiltrator_filesystem_api_v2();
+        IfsFsHostIoV1 host = {0};
+        IfsFsVolumeInfoV1 volume_info = {0};
+        IfsFsEntryV1 name_info = {0};
+        char filename[64] = {0};
+        unsigned char read_byte = 0u;
+        void *opened = NULL;
+        uint32_t detected = 0u;
+        host.structure_bytes = sizeof(host);
+        host.flags = IFS_FS_IO_READ_ONLY;
+        host.volume_bytes = sizeof disk;
+        host.read_at = io_read;
+        host.allocate = common_alloc;
+        host.release = common_free;
+        volume_info.structure_bytes = sizeof(volume_info);
+        name_info.structure_bytes = sizeof(name_info);
+        name_info.name = filename;
+        name_info.name_capacity = sizeof(filename);
+        if (!ifs_fs_common_api_valid(common, "minix") ||
+            !ifs_fs_api_v2_valid(extension, "minix") ||
+            extension->base_v1 != common ||
+            (extension->runtime_profiles & IFS_FS_PROFILE_KERNEL) != 0u)
+            return fail("Common ABI is invalid or claims unsupported kernel profile");
+        if (common->probe(&host, &detected) != IFS_FS_OK ||
+            detected != version ||
+            common->mount(&host, &opened, &volume_info) != IFS_FS_OK ||
+            !opened || volume_info.variant != version)
+            return fail("Common probe/mount could not read genuine Minix variant");
+        if (common->stat(opened, "/HELLO.TXT", &name_info) != IFS_FS_OK ||
+            strcmp(filename, "HELLO.TXT") != 0 ||
+            common->directory_entry(opened, "/", 0u, &name_info) != IFS_FS_OK ||
+            strcmp(filename, "HELLO.TXT") != 0 ||
+            common->directory_entry(opened, "/", 1u, &name_info) != IFS_FS_END ||
+            common->read(opened, "/HELLO.TXT", 0u, &read_byte, 1u) != IFS_FS_OK ||
+            read_byte != 'A')
+            return fail("Common Minix read, stat or directory contents mismatch");
+        if (common->write(opened, "/HELLO.TXT", 0u, "X", 1u) != IFS_FS_ACCESS ||
+            common->format || common->create || common->recover)
+            return fail("Common advertised invalid Minix mutation capability");
+        if (common->unmount(opened) != IFS_FS_OK)
+            return fail("Common Minix unmount failed");
+    }
     if (api->read(&volume, &file, 7u*BS-3u, bytes, 7u) != 0 ||
         memcmp(bytes, "GGGHHHH", 7u) != 0 ||
         api->read(&volume, &file, 9u*BS+4u, bytes, 1u) != 0 ||
