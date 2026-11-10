@@ -52,6 +52,7 @@ if(BUILD_TESTING)
  target_include_directories(minix-v1-v2-module-test PRIVATE
    "${CMAKE_CURRENT_SOURCE_DIR}/native/filesystems/minix/module")
  target_link_libraries(minix-v1-v2-module-test PRIVATE InfiltratrCommon::Common)
+ target_compile_definitions(minix-v1-v2-module-test PRIVATE IFS_TEST_COMMON_V2=1)
  add_test(NAME minix-original-v1-v2 COMMAND minix-v1-v2-module-test)
 endif()
 install(TARGETS minix-driver LIBRARY DESTINATION /System/Filesystems)
