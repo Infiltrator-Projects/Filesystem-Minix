@@ -1,0 +1,31 @@
+# Reviewed migration retirement; no archive tags or V1 restoration.
+name: Retire reviewed superseded branches
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/retire-reviewed-branches.yml']
+permissions:
+  contents: write
+jobs:
+  retire:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Remove only explicitly reviewed immutable branch tips
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r branch expected; do
+            [ -n "$branch" ] || continue
+            current="$(gh api "repos/$REPO/git/ref/heads/$branch" --jq '.object.sha' 2>/dev/null || true)"
+            if [ "$current" != "$expected" ]; then
+              if [ -n "$current" ]; then echo "::error::Branch moved: $branch"; exit 1; fi
+              continue
+            fi
+            gh api --method DELETE "repos/$REPO/git/refs/heads/$branch"
+            printf 'Retired reviewed branch: %s\n' "$branch"
+          done <<'REVIEWED_BRANCHES'
+          work/common-v2-minix-host-20261110|0d3b7181e3d9ff70af23eb07cfb035842182dd05
+          REVIEWED_BRANCHES
