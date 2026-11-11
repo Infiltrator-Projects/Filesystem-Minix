@@ -1,280 +1,331 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Common V1/V2 bridge to the existing native Minix V1/V2/V3 engine.
- * All media I/O is partition-relative and delegated to that engine.
+ * Strict Common V2 Minix filesystem over the canonical V1/V2/V3
+ * ON-DISK parser and bounded existing-data writer. Disk format versions
+ * are independent of the Common filesystem ABI.
  */
 #include <infiltratr/filesystem_module_v2.h>
 #include "../native/filesystems/minix/module/minix_module.h"
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 
-#define COMMON_MINIX_LIVE UINT32_C(0x4d494e58)
-typedef struct {
-    uint32_t live;
-    IfsFsHostIoV1 host;
+/* The source-owned engine is per-volume and uses host-neutral I/O.
+ * One native shared-object instance owns one active mounted volume. */
+static struct {
+    uintptr_t generation, active;
+    IfsFsHostRuntimeV2 host;
     IfsMinixVolume media;
-} CommonMinix;
+} session;
 
 static const IfsMinixModule *native(void)
 {
     return infiltrator_filesystem_module_v1();
 }
-static int host_ok(const IfsFsHostIoV1 *h)
+static int host_ok(const IfsFsHostRuntimeV2 *host)
 {
-    return h && h->structure_bytes >= sizeof(*h) && h->read_at &&
-        h->volume_bytes >= 5120u &&
-        !(h->flags & ~(IFS_FS_IO_READ_ONLY | IFS_FS_IO_EXCLUSIVE));
+    return ifs_fs_host_v2_valid(host) && host->volume_bytes >= 5120u;
 }
-static IfsMinixIo minix_io(const IfsFsHostIoV1 *h)
+static int host_read(void *context,uint64_t position,void *data,uint32_t n)
 {
-    IfsMinixIo io = {h->read_at, h->context, h->volume_bytes};
+    return ifs_fs_host_read_bytes_v2(
+        (const IfsFsHostRuntimeV2 *)context,position,data,n)==IFS_FS_OK?0:-1;
+}
+/* The existing Minix overwrite engine can request byte-granular writes.
+ * V2's only authorised device writes are complete logical sectors, so
+ * preserve every neighbouring byte with a bounded read/modify/write.
+ * This does NOT claim crash rollback after a failed host write. */
+static int host_write(void *context,uint64_t position,
+                      const void *buffer,uint32_t length)
+{
+    const IfsFsHostRuntimeV2 *h=context;
+    const unsigned char *source=buffer;
+    const uint32_t sector=h ? h->logical_sector_bytes : 0u;
+    uint8_t *scratch=NULL;
+    uint32_t n,skip;
+    int result=-1;
+    if(!host_ok(h) || !h->write_at || !h->flush ||
+       (h->capabilities & IFS_FS_HOST_READ_ONLY) ||
+       !(h->capabilities & IFS_FS_HOST_EXCLUSIVE) ||
+       !(h->capabilities & IFS_FS_HOST_DURABLE) ||
+       (!source && length) || position>h->volume_bytes ||
+       length>h->volume_bytes-position)
+        return -1;
+    if(!length)return 0;
+    scratch=h->allocate(h->context,sector);
+    if(!scratch)return -1;
+    while(length) {
+        uint64_t base=position-position%sector;
+        skip=(uint32_t)(position%sector);
+        n=sector-skip;
+        if(n>length)n=length;
+        if(base>h->volume_bytes || sector>h->volume_bytes-base)
+            goto done;
+        if(skip || n!=sector) {
+            if(h->read_at(h->context,base,scratch,sector)!=0)
+                goto done;
+            memcpy(scratch+skip,source,n);
+        } else
+            memcpy(scratch,source,sector);
+        if(h->write_at(h->context,base,scratch,sector)!=0)
+            goto done;
+        position+=n;
+        source+=n;
+        length-=n;
+    }
+    result=0;
+done:
+    h->release(h->context,scratch);
+    return result;
+}
+static int host_flush(void *context)
+{
+    const IfsFsHostRuntimeV2 *h=context;
+    return host_ok(h) && h->flush && h->flush(h->context)==0 ? 0 : -1;
+}
+static IfsMinixIo minix_io(const IfsFsHostRuntimeV2 *h)
+{
+    IfsMinixIo io={host_read,(void *)h,h->volume_bytes};
     return io;
 }
-static int probe(const IfsFsHostIoV1 *h, uint32_t *variant)
+static int probe(const IfsFsHostRuntimeV2 *h,uint32_t *variant)
 {
-    IfsMinixVolume volume;
+    IfsMinixVolume media={0};
     IfsMinixIo io;
-    if (!host_ok(h) || !variant) return IFS_FS_INVALID;
-    io = minix_io(h);
-    if (native()->mount(&volume, &io) != 0) return IFS_FS_NOT_FOUND;
-    *variant = volume.version;
+    if(!variant || !host_ok(h))return IFS_FS_INVALID;
+    *variant=0u;
+    io=minix_io(h);
+    if(native()->mount(&media,&io)!=0)return IFS_FS_NOT_FOUND;
+    *variant=media.version;
     return IFS_FS_OK;
 }
-static int mounted(const CommonMinix *v)
+static int live(void *volume)
 {
-    return v && v->live == COMMON_MINIX_LIVE &&
-        v->host.read_at && v->media.io.user == v->host.context;
+    return session.active!=0u && (uintptr_t)volume==session.active;
 }
-static void describe(const CommonMinix *v, IfsFsVolumeInfoV1 *info)
+static void describe(IfsFsVolumeInfoV2 *info)
 {
-    info->variant = v->media.version;
-    info->block_bytes = v->media.block_bytes;
-    info->max_name_bytes = v->media.name_bytes;
-    info->total_bytes = v->media.volume_bytes;
-    /* This read-only geometry engine does not expose an allocation count. */
-    info->free_bytes = 0u;
+    info->structure_bytes=sizeof(*info);
+    info->variant=session.media.version;
+    info->block_bytes=session.media.block_bytes;
+    info->max_name_bytes=session.media.name_bytes;
+    info->total_bytes=session.media.volume_bytes;
+    /* No independently verified free-block count exists in this parser. */
+    info->free_bytes=0u;
 }
-static int mount(const IfsFsHostIoV1 *h, void **out,
-                 IfsFsVolumeInfoV1 *info)
+static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
+                        IfsFsVolumeInfoV2 *info)
 {
-    CommonMinix *v;
     IfsMinixIo io;
-    if (!host_ok(h) || !out || !info ||
-        info->structure_bytes < sizeof(*info) ||
-        !h->allocate || !h->release) return IFS_FS_INVALID;
-    *out = NULL;
-    v = h->allocate(h->context, sizeof(*v));
-    if (!v) return IFS_FS_NO_MEMORY;
-    memset(v, 0, sizeof(*v));
-    v->host = *h;
-    io = minix_io(&v->host);
-    if (native()->mount(&v->media, &io) != 0) {
-        h->release(h->context, v);
+    if(!out || !info || info->structure_bytes<sizeof(*info) || !host_ok(h))
+        return IFS_FS_INVALID;
+    *out=NULL;
+    if(session.active || session.generation==UINTPTR_MAX)
+        return IFS_FS_BUSY;
+    session.host=*h;
+    io=minix_io(&session.host);
+    if(native()->mount(&session.media,&io)!=0) {
+        memset(&session.host,0,sizeof(session.host));
+        memset(&session.media,0,sizeof(session.media));
         return IFS_FS_CORRUPT;
     }
-    v->live = COMMON_MINIX_LIVE;
-    describe(v, info);
-    *out = v;
+    session.active=++session.generation;
+    describe(info);
+    *out=(void *)session.active;
     return IFS_FS_OK;
 }
-static int unmount(void *volume)
+static int unmount_volume(void *volume)
 {
-    CommonMinix *v = volume;
-    IfsFsHostIoV1 host;
-    if (!mounted(v)) return IFS_FS_INVALID;
-    host = v->host;
-    v->live = 0u;
-    host.release(host.context, v);
+    if(!live(volume))return IFS_FS_INVALID;
+    session.active=0u;
+    memset(&session.host,0,sizeof(session.host));
+    memset(&session.media,0,sizeof(session.media));
     return IFS_FS_OK;
 }
-/* Reject unnormalised traversal, including dot segments. Never follow links. */
-static int resolve(CommonMinix *v, const char *path, IfsMinixInode *inode,
-                   const char **basename, uint32_t *bytes)
+static int volume_query(void *volume,IfsFsVolumeInfoV2 *info)
+{
+    if(!live(volume)||!info||info->structure_bytes<sizeof(*info))
+        return IFS_FS_INVALID;
+    describe(info);
+    return IFS_FS_OK;
+}
+static int volume_sync(void *volume)
+{
+    if(!live(volume))return IFS_FS_INVALID;
+    if(session.host.capabilities & IFS_FS_HOST_READ_ONLY)return IFS_FS_OK;
+    return host_flush(&session.host)==0?IFS_FS_OK:IFS_FS_IO_ERROR;
+}
+
+/* No symlink traversal; reject dot segments and trailing slashes. */
+static int resolve(const char *path,IfsMinixInode *inode,
+                   const char **basename,uint32_t *bytes)
 {
     const char *p;
-    if (!mounted(v) || !path || path[0] != '/' || !inode ||
-        native()->inode(&v->media, 1u, inode) != 0)
+    if(!session.active || !path || path[0]!='/' || !inode ||
+       native()->inode(&session.media,1u,inode)!=0)
         return IFS_FS_INVALID;
-    p = path + 1;
-    if (!*p) {
-        if (basename) *basename = "/";
-        if (bytes) *bytes = 1u;
+    p=path+1;
+    if(!*p) {
+        if(basename)*basename="/";
+        if(bytes)*bytes=1u;
         return IFS_FS_OK;
     }
-    while (*p) {
-        IfsMinixDirent dirent = {0};
-        const char *start = p;
+    while(*p) {
+        IfsMinixDirent dent={0};
+        const char *start=p;
         size_t n;
         int rc;
-        while (*p && *p != '/') ++p;
-        n = (size_t)(p - start);
-        if (!n || n > v->media.name_bytes ||
-            (n == 1u && *start == '.') ||
-            (n == 2u && start[0] == '.' && start[1] == '.'))
+        while(*p && *p!='/')++p;
+        n=(size_t)(p-start);
+        if(!n || n>session.media.name_bytes ||
+           (n==1u && *start=='.') ||
+           (n==2u && start[0]=='.' && start[1]=='.'))
             return IFS_FS_INVALID;
-        if ((inode->mode & 0xf000u) != IFS_MINIX_MODE_DIRECTORY)
+        if((inode->mode&0xf000u)!=IFS_MINIX_MODE_DIRECTORY)
             return IFS_FS_NOT_FOUND;
-        rc = native()->lookup(&v->media, inode, start, (uint32_t)n, &dirent);
-        if (rc != 0) return rc == 1 ? IFS_FS_NOT_FOUND : IFS_FS_CORRUPT;
-        if (native()->inode(&v->media, dirent.inode_number, inode) != 0)
+        rc=native()->lookup(&session.media,inode,start,(uint32_t)n,&dent);
+        if(rc!=0)return rc==1?IFS_FS_NOT_FOUND:IFS_FS_CORRUPT;
+        if(native()->inode(&session.media,dent.inode_number,inode)!=0)
             return IFS_FS_CORRUPT;
-        if (basename) *basename = start;
-        if (bytes) *bytes = (uint32_t)n;
-        if (*p == '/' && !*++p) return IFS_FS_INVALID;
+        if(basename)*basename=start;
+        if(bytes)*bytes=(uint32_t)n;
+        if(*p=='/' && !*++p)return IFS_FS_INVALID;
     }
     return IFS_FS_OK;
 }
-static int fill(IfsFsEntryV1 *out, const IfsMinixInode *inode,
-                const char *name, uint32_t bytes)
+static int fill(IfsFsEntryV2 *out,const IfsMinixInode *inode,
+                const char *name,uint32_t bytes)
 {
     uint32_t type;
-    if (!out || out->structure_bytes < sizeof(*out) ||
-        !out->name || !name || bytes >= out->name_capacity)
+    if(!out || out->structure_bytes<sizeof(*out) ||
+       !out->name || !name || bytes>=out->name_capacity)
         return IFS_FS_INVALID;
-    switch (inode->mode & 0xf000u) {
-    case IFS_MINIX_MODE_REGULAR: type = IFS_FS_ENTRY_FILE; break;
-    case IFS_MINIX_MODE_DIRECTORY: type = IFS_FS_ENTRY_DIRECTORY; break;
-    case IFS_MINIX_MODE_SYMLINK: type = IFS_FS_ENTRY_LINK; break;
-    default: return IFS_FS_UNSUPPORTED;
+    switch(inode->mode&0xf000u) {
+    case IFS_MINIX_MODE_REGULAR:type=IFS_FS_ENTRY_FILE;break;
+    case IFS_MINIX_MODE_DIRECTORY:type=IFS_FS_ENTRY_DIRECTORY;break;
+    case IFS_MINIX_MODE_SYMLINK:type=IFS_FS_ENTRY_LINK;break;
+    default:return IFS_FS_UNSUPPORTED;
     }
-    memcpy(out->name, name, bytes);
-    out->name[bytes] = '\0';
-    out->name_bytes = bytes;
-    out->type = type;
-    out->attributes = inode->mode;
-    out->size_bytes = inode->size_bytes;
+    memcpy(out->name,name,bytes);
+    out->name[bytes]='\0';
+    out->name_bytes=bytes;
+    out->type=type;
+    out->attributes=inode->mode;
+    out->size_bytes=inode->size_bytes;
     return IFS_FS_OK;
 }
-static int stat_path(void *volume, const char *path, IfsFsEntryV1 *out)
+static int stat_path(void *volume,const char *path,IfsFsEntryV2 *out)
 {
-    CommonMinix *v = volume;
     IfsMinixInode inode;
-    const char *name = NULL;
-    uint32_t n = 0;
-    int rc = resolve(v, path, &inode, &name, &n);
-    return rc ? rc : fill(out, &inode, name, n);
+    const char *name=NULL;
+    uint32_t bytes=0;
+    int rc;
+    if(!live(volume))return IFS_FS_INVALID;
+    rc=resolve(path,&inode,&name,&bytes);
+    return rc?rc:fill(out,&inode,name,bytes);
 }
-static int directory_entry(void *volume, const char *path, uint32_t index,
-                           IfsFsEntryV1 *out)
+static int directory_entry(void *volume,const char *path,uint32_t index,
+                           IfsFsEntryV2 *out)
 {
-    CommonMinix *v = volume;
-    IfsMinixInode directory, file;
-    uint32_t returned = 0u;
-    int rc = resolve(v, path, &directory, NULL, NULL);
-    if (rc) return rc;
-    if ((directory.mode & 0xf000u) != IFS_MINIX_MODE_DIRECTORY)
+    IfsMinixInode directory,file;
+    uint32_t returned=0u;
+    int rc;
+    if(!live(volume))return IFS_FS_INVALID;
+    rc=resolve(path,&directory,NULL,NULL);
+    if(rc)return rc;
+    if((directory.mode&0xf000u)!=IFS_MINIX_MODE_DIRECTORY)
         return IFS_FS_INVALID;
-    for (uint32_t i = 0; ; ++i) {
-        IfsMinixDirent e = {0};
+    for(uint32_t i=0u;;++i) {
+        IfsMinixDirent dent={0};
         const char *zero;
         uint32_t len;
-        rc = native()->entry(&v->media, &directory, i, &e);
-        if (rc) return rc == 1 ? IFS_FS_END : IFS_FS_CORRUPT;
-        /* The Minix engine returns a bounded NUL-terminated name. */
-        zero = memchr(e.name, '\0', sizeof(e.name));
-        if (!zero) return IFS_FS_CORRUPT;
-        len = (uint32_t)(zero - e.name);
-        if ((len == 1u && e.name[0] == '.') ||
-            (len == 2u && e.name[0] == '.' && e.name[1] == '.'))
+        rc=native()->entry(&session.media,&directory,i,&dent);
+        if(rc)return rc==1?IFS_FS_END:IFS_FS_CORRUPT;
+        zero=memchr(dent.name,'\0',sizeof(dent.name));
+        if(!zero)return IFS_FS_CORRUPT;
+        len=(uint32_t)(zero-dent.name);
+        if((len==1u && dent.name[0]=='.') ||
+           (len==2u && dent.name[0]=='.' && dent.name[1]=='.'))
             continue;
-        if (returned++ != index) continue;
-        if (native()->inode(&v->media, e.inode_number, &file) != 0)
+        if(returned++!=index)continue;
+        if(native()->inode(&session.media,dent.inode_number,&file)!=0)
             return IFS_FS_CORRUPT;
-        return fill(out, &file, e.name, len);
+        return fill(out,&file,dent.name,len);
     }
 }
-static int read_file(void *volume, const char *path, uint64_t offset,
-                     void *data, uint32_t length)
+static int read_file(void *volume,const char *path,uint64_t at,
+                     void *data,uint32_t length)
 {
-    CommonMinix *v = volume;
     IfsMinixInode inode;
     int rc;
-    if (!mounted(v) || (!data && length)) return IFS_FS_INVALID;
-    rc = resolve(v, path, &inode, NULL, NULL);
-    if (rc) return rc;
-    if ((inode.mode & 0xf000u) != IFS_MINIX_MODE_REGULAR)
+    if(!live(volume) || (!data && length))return IFS_FS_INVALID;
+    rc=resolve(path,&inode,NULL,NULL);
+    if(rc)return rc;
+    if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR)
         return IFS_FS_INVALID;
-    if (offset > inode.size_bytes || length > inode.size_bytes - offset)
+    if(at>inode.size_bytes || length>inode.size_bytes-at)
         return IFS_FS_UNSUPPORTED;
-    return native()->read(&v->media, &inode, offset, data, length) == 0 ?
-        IFS_FS_OK : IFS_FS_IO_ERROR;
+    return native()->read(&session.media,&inode,at,data,length)==0?
+        IFS_FS_OK:IFS_FS_IO_ERROR;
 }
-static int write_file(void *volume, const char *path, uint64_t offset,
-                      const void *data, uint32_t length)
+static int write_file(void *volume,const char *path,uint64_t at,
+                      const void *data,uint32_t length)
 {
-    CommonMinix *v = volume;
     IfsMinixInode inode;
-    IfsMinixWritableIo io = {0};
+    IfsMinixWritableIo io={0};
     int rc;
-    if (!mounted(v) || (!data && length)) return IFS_FS_INVALID;
-    if ((v->host.flags & IFS_FS_IO_READ_ONLY) ||
-        !(v->host.flags & IFS_FS_IO_EXCLUSIVE) ||
-        !v->host.write_at || !v->host.flush) return IFS_FS_ACCESS;
-    rc = resolve(v, path, &inode, NULL, NULL);
-    if (rc) return rc;
-    if ((inode.mode & 0xf000u) != IFS_MINIX_MODE_REGULAR)
+    if(!live(volume) || (!data && length))return IFS_FS_INVALID;
+    if((session.host.capabilities & IFS_FS_HOST_READ_ONLY) ||
+       !(session.host.capabilities & IFS_FS_HOST_EXCLUSIVE) ||
+       !(session.host.capabilities & IFS_FS_HOST_DURABLE) ||
+       !session.host.write_at || !session.host.flush)
+        return IFS_FS_ACCESS;
+    rc=resolve(path,&inode,NULL,NULL);
+    if(rc)return rc;
+    if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR)
         return IFS_FS_INVALID;
-    if (offset > inode.size_bytes || length > inode.size_bytes - offset)
+    if(at>inode.size_bytes || length>inode.size_bytes-at)
         return IFS_FS_UNSUPPORTED;
-    io.read = minix_io(&v->host);
-    io.write_at = v->host.write_at;
-    io.flush = v->host.flush;
+    io.read=minix_io(&session.host);
+    io.write_at=host_write;
+    io.flush=host_flush;
     return infiltrator_filesystem_module_v2()->overwrite_existing(
-        &io, &v->media, &inode, offset, data, length) == 0 ?
-        IFS_FS_OK : IFS_FS_IO_ERROR;
+        &io,&session.media,&inode,at,data,length)==0?
+        IFS_FS_OK:IFS_FS_IO_ERROR;
 }
-/* The underlying Minix API currently provides bounded overwrite only. */
-static const IfsFsModuleApiV1 common_v1 = {
-    .abi_version=IFS_FS_COMMON_ABI_V1,
-    .structure_bytes=sizeof(IfsFsModuleApiV1),
-    .format_id="minix",
-    .capabilities=IFS_FS_CAP_PROBE | IFS_FS_CAP_MOUNT |
-        IFS_FS_CAP_LIST | IFS_FS_CAP_READ | IFS_FS_CAP_WRITE,
-    .probe=probe, .mount=mount, .unmount=unmount,
-    .stat=stat_path, .directory_entry=directory_entry,
-    .read=read_file, .write=write_file
+static const IfsFsCoreOpsV2 core={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
+             IFS_FS_GROUP_CORE,0u,
+             IFS_FS_CORE_PROBE|IFS_FS_CORE_MOUNT|IFS_FS_CORE_STAT|
+             IFS_FS_CORE_LIST|IFS_FS_CORE_READ|IFS_FS_CORE_WRITE},
+    .probe=probe,.mount=mount_volume,.unmount=unmount_volume,
+    .stat=stat_path,.directory_entry=directory_entry,
+    .read=read_file,.write=write_file
 };
-__attribute__((visibility("default")))
-const IfsFsModuleApiV1 *infiltrator_filesystem_api_v1(void)
-{
-    return &common_v1;
-}
-static int query_volume(void *volume, IfsFsVolumeInfoV1 *out)
-{
-    CommonMinix *v = volume;
-    if (!mounted(v) || !out || out->structure_bytes < sizeof(*out))
-        return IFS_FS_INVALID;
-    describe(v, out);
-    return IFS_FS_OK;
-}
-static int sync_volume(void *volume)
-{
-    CommonMinix *v = volume;
-    if (!mounted(v)) return IFS_FS_INVALID;
-    if ((v->host.flags & IFS_FS_IO_READ_ONLY) || !v->host.write_at)
-        return IFS_FS_OK;
-    return v->host.flush && v->host.flush(v->host.context) == 0 ?
-        IFS_FS_OK : IFS_FS_IO_ERROR;
-}
-static const IfsFsVolumeOpsV1 volume_ops = {
-    .header={IFS_FS_GROUP_ABI_V1, sizeof(IfsFsVolumeOpsV1),
-             IFS_FS_GROUP_VOLUME, 0u,
-             IFS_FS_VOLUME_QUERY | IFS_FS_VOLUME_SYNC},
-    .query=query_volume, .sync=sync_volume
+static const IfsFsVolumeOpsV2 volume_ops={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsVolumeOpsV2),
+             IFS_FS_GROUP_VOLUME,0u,
+             IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_SYNC},
+    .query=volume_query,.sync=volume_sync
 };
-static const IfsFsGroupHeaderV2 *query_group(uint32_t id,
-                                              uint32_t minimum,
-                                              uint32_t maximum)
+static const IfsFsGroupHeaderV2 *query_group(
+    uint32_t id,uint32_t minimum,uint32_t maximum)
 {
-    return id == IFS_FS_GROUP_VOLUME && minimum <= IFS_FS_GROUP_ABI_V1 &&
-        maximum >= IFS_FS_GROUP_ABI_V1 ? &volume_ops.header : NULL;
+    if(minimum>IFS_FS_GROUP_ABI_V2 || maximum<IFS_FS_GROUP_ABI_V2)
+        return NULL;
+    if(id==IFS_FS_GROUP_CORE)return &core.header;
+    if(id==IFS_FS_GROUP_VOLUME)return &volume_ops.header;
+    return NULL;
 }
-static const IfsFsModuleApiV2 common_v2 = {
-    IFS_FS_COMMON_ABI_V2, sizeof(IfsFsModuleApiV2), "minix",
-    IFS_FS_PROFILE_HOSTED, IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME),
-    &common_v1, query_group
+__attribute__((used,section(".ifsmeta")))
+static const char identity[]="IFS-MODULE:minix:common2";
+static const IfsFsModuleApiV2 api={
+    IFS_FS_COMMON_ABI_V2,sizeof(IfsFsModuleApiV2),"minix",
+    IFS_FS_PROFILE_HOSTED,
+    IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
+        IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME),query_group
 };
 __attribute__((visibility("default")))
 const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void)
 {
-    return &common_v2;
+    return &api;
 }

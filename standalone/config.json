@@ -2,6 +2,6 @@
   "repository": "Filesystem-Minix",
   "module": "MINIX.so",
   "pdf": "docs/Minix.pdf",
-  "abi": "infiltrator_filesystem_minix_defrag_v1",
+  "abi": "infiltrator_filesystem_api_v2",
   "build_system": "cmake"
 }

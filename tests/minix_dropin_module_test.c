@@ -4,7 +4,6 @@
 #ifdef IFS_TEST_COMMON_V2
 #include <infiltratr/filesystem_module_v2.h>
 #include <stdlib.h>
-extern const IfsFsModuleApiV1 *infiltrator_filesystem_api_v1(void);
 extern const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void);
 #endif
 #include <stdint.h>
@@ -45,6 +44,19 @@ static int io_flush(void *u)
     return 0;
 }
 #ifdef IFS_TEST_COMMON_V2
+static uint32_t common_sector=512u;
+static int common_read(void *ctx,uint64_t at,void *dst,uint32_t length)
+{
+    if(at%common_sector || length%common_sector || length>common_sector)
+        return -1;
+    return io_read(ctx,at,dst,length);
+}
+static int common_write(void *ctx,uint64_t at,const void *src,uint32_t length)
+{
+    if(at%common_sector || length%common_sector || length>common_sector)
+        return -1;
+    return io_write(ctx,at,src,length);
+}
 static void *common_alloc(void *ctx, size_t bytes)
 {
     (void)ctx;
@@ -168,51 +180,112 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         api->lookup(&volume, &root, "wrong", 5u, &dent) != 1)
         return fail("directory lookup mismatch");
 #ifdef IFS_TEST_COMMON_V2
-    /* Common ABI is independently exercised on this REAL Minix fixture.
-     * Different on-disk Minix versions preserve the same software contract. */
+    /* Test real Minix V1/V2/V3 on-media content through ONE strict Common
+     * V2 interface. The native disk variants are not ABI compatibility. */
     {
-        const IfsFsModuleApiV1 *common = infiltrator_filesystem_api_v1();
-        const IfsFsModuleApiV2 *extension = infiltrator_filesystem_api_v2();
-        IfsFsHostIoV1 host = {0};
-        IfsFsVolumeInfoV1 volume_info = {0};
-        IfsFsEntryV1 name_info = {0};
-        char filename[64] = {0};
-        unsigned char read_byte = 0u;
-        void *opened = NULL;
-        uint32_t detected = 0u;
-        host.structure_bytes = sizeof(host);
-        host.flags = IFS_FS_IO_READ_ONLY;
-        host.volume_bytes = sizeof disk;
-        host.read_at = io_read;
-        host.allocate = common_alloc;
-        host.release = common_free;
-        volume_info.structure_bytes = sizeof(volume_info);
-        name_info.structure_bytes = sizeof(name_info);
-        name_info.name = filename;
-        name_info.name_capacity = sizeof(filename);
-        if (!ifs_fs_common_api_valid(common, "minix") ||
-            !ifs_fs_api_v2_valid(extension, "minix") ||
-            extension->base_v1 != common ||
-            (extension->runtime_profiles & IFS_FS_PROFILE_KERNEL) != 0u)
-            return fail("Common ABI is invalid or claims unsupported kernel profile");
-        if (common->probe(&host, &detected) != IFS_FS_OK ||
-            detected != version ||
-            common->mount(&host, &opened, &volume_info) != IFS_FS_OK ||
-            !opened || volume_info.variant != version)
-            return fail("Common probe/mount could not read genuine Minix variant");
-        if (common->stat(opened, "/HELLO.TXT", &name_info) != IFS_FS_OK ||
-            strcmp(filename, "HELLO.TXT") != 0 ||
-            common->directory_entry(opened, "/", 0u, &name_info) != IFS_FS_OK ||
-            strcmp(filename, "HELLO.TXT") != 0 ||
-            common->directory_entry(opened, "/", 1u, &name_info) != IFS_FS_END ||
-            common->read(opened, "/HELLO.TXT", 0u, &read_byte, 1u) != IFS_FS_OK ||
-            read_byte != 'A')
-            return fail("Common Minix read, stat or directory contents mismatch");
-        if (common->write(opened, "/HELLO.TXT", 0u, "X", 1u) != IFS_FS_ACCESS ||
-            common->format || common->create || common->recover)
-            return fail("Common advertised invalid Minix mutation capability");
-        if (common->unmount(opened) != IFS_FS_OK)
-            return fail("Common Minix unmount failed");
+        const IfsFsModuleApiV2 *common=infiltrator_filesystem_api_v2();
+        const IfsFsCoreOpsV2 *core;
+        const IfsFsVolumeOpsV2 *volume_ops;
+        IfsFsHostRuntimeV2 host={0};
+        IfsFsVolumeInfoV2 volume_info={0};
+        IfsFsEntryV2 name_info={0};
+        char filename[64]={0};
+        unsigned char byte=0u;
+        void *opened=NULL,*old=NULL;
+        uint32_t detected=0u;
+        host.abi_version=IFS_FS_HOST_ABI_V2;
+        host.structure_bytes=sizeof(host);
+        host.capabilities=IFS_FS_HOST_READ_ONLY;
+        host.volume_bytes=sizeof disk;
+        host.logical_sector_bytes=512u;
+        host.physical_sector_bytes=512u;
+        host.maximum_transfer_bytes=512u;
+        host.read_at=common_read;
+        host.allocate=common_alloc;
+        host.release=common_free;
+        volume_info.structure_bytes=sizeof(volume_info);
+        name_info.structure_bytes=sizeof(name_info);
+        name_info.name=filename;
+        name_info.name_capacity=sizeof(filename);
+        if(!ifs_fs_host_v2_valid(&host) ||
+           !ifs_fs_api_v2_valid(common,"minix") ||
+           common->group_mask!=(IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
+                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)) ||
+           (common->runtime_profiles & IFS_FS_PROFILE_KERNEL))
+            return fail("strict Common V2 ABI or host invalid");
+        core=(const IfsFsCoreOpsV2 *)ifs_fs_group_v2(common,IFS_FS_GROUP_CORE);
+        volume_ops=(const IfsFsVolumeOpsV2 *)ifs_fs_group_v2(common,IFS_FS_GROUP_VOLUME);
+        if(!core || !core->probe || !core->mount || !core->unmount ||
+           !core->stat || !core->directory_entry || !core->read || !core->write ||
+           !volume_ops || !volume_ops->query || !volume_ops->sync ||
+           volume_ops->format || ifs_fs_group_v2(common,IFS_FS_GROUP_DEFRAG))
+            return fail("Missing strict V2 functionality or false capability");
+        if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version ||
+           core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
+           volume_info.variant!=version)
+            return fail("V2 probe/mount failed on real Minix media");
+        old=opened;
+        if(core->stat(opened,"/HELLO.TXT",&name_info)!=IFS_FS_OK ||
+           strcmp(filename,"HELLO.TXT") ||
+           core->directory_entry(opened,"/",0u,&name_info)!=IFS_FS_OK ||
+           strcmp(filename,"HELLO.TXT") ||
+           core->directory_entry(opened,"/",1u,&name_info)!=IFS_FS_END ||
+           core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
+           byte!='A')
+            return fail("V2 native directory or file data mismatch");
+        if(core->write(opened,"/HELLO.TXT",0u,"X",1u)!=IFS_FS_ACCESS ||
+           volume_ops->query(opened,&volume_info)!=IFS_FS_OK ||
+           volume_info.variant!=version || volume_ops->format ||
+           core->create || core->truncate)
+            return fail("V2 unsupported mutation capability falsely accepted");
+        {
+            void *duplicate=NULL;
+            if(core->mount(&host,&duplicate,&volume_info)!=IFS_FS_BUSY ||
+               duplicate) return fail("V2 admitted duplicate volume session");
+        }
+        /* Existing-file bytes can be overwritten only on an exclusive,
+         * durably flushed V2 host. The native writer validates every zone. */
+        if(core->unmount(opened)!=IFS_FS_OK ||
+           core->unmount(old)!=IFS_FS_INVALID)
+            return fail("V2 unmount / stale handle acceptance");
+        host.capabilities=IFS_FS_HOST_EXCLUSIVE|IFS_FS_HOST_DURABLE;
+        host.write_at=common_write;
+        host.flush=io_flush;
+        if(!ifs_fs_host_v2_valid(&host))return fail("Writable V2 host invalid");
+        volume_info.structure_bytes=sizeof(volume_info);
+        if(core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
+           opened==old) return fail("V2 exclusive mount failed");
+        writes=flushes=0u;
+        if(core->write(opened,"/HELLO.TXT",7u*BS-3u,"wXYZfoo",7u)!=IFS_FS_OK ||
+           !writes || !flushes ||
+           core->read(opened,"/HELLO.TXT",7u*BS-3u,
+                      bytes,7u)!=IFS_FS_OK ||
+           memcmp(bytes,"wXYZfoo",7u))
+            return fail("Strict V2 bounded native write/read mismatch");
+        if(core->write(opened,"/HELLO.TXT",9u*BS+5u,"X",1u)!=IFS_FS_UNSUPPORTED ||
+           core->write(opened,"/../HELLO.TXT",0u,"X",1u)!=IFS_FS_INVALID ||
+           volume_ops->sync(opened)!=IFS_FS_OK ||
+           core->unmount(opened)!=IFS_FS_OK ||
+           volume_ops->query(old,&volume_info)!=IFS_FS_INVALID)
+            return fail("V2 unsafe path/write/sync/stale check failed");
+        fixture(version,name_bytes);
+        /* 4Kn read-only host: byte-oriented Minix inode and bitmap accesses
+         * are reconstructed by Common without unaligned device callbacks. */
+        host.capabilities=IFS_FS_HOST_READ_ONLY;
+        host.write_at=NULL;host.flush=NULL;
+        host.logical_sector_bytes=4096u;
+        host.physical_sector_bytes=4096u;
+        host.maximum_transfer_bytes=4096u;
+        common_sector=4096u;
+        if(!ifs_fs_host_v2_valid(&host) ||
+           core->probe(&host,&detected)!=IFS_FS_OK || detected!=version ||
+           core->mount(&host,&opened,&volume_info)!=IFS_FS_OK ||
+           core->read(opened,"/HELLO.TXT",7u*BS-3u,
+                      bytes,7u)!=IFS_FS_OK ||
+           memcmp(bytes,"GGGHHHH",7u) ||
+           core->unmount(opened)!=IFS_FS_OK)
+            return fail("4Kn Common V2 byte offset access failed");
+        common_sector=512u;
     }
 #endif
     if (api->read(&volume, &file, 7u*BS-3u, bytes, 7u) != 0 ||
