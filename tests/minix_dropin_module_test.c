@@ -127,6 +127,10 @@ static void fixture(uint32_t version, uint32_t namelen)
     }
     disk[2u * BS] = 7u;               /* reserved, root and file inodes */
     memset(disk + 3u * BS, 0xffu, BS);
+    /* Free two real data zones (30,31) that are not owned by the file.
+     * Bit 1 corresponds to first_data_zone=8; bit 0 is reserved. */
+    disk[3u*BS+2u] &= (uint8_t)~(1u<<7u);
+    disk[3u*BS+3u] &= (uint8_t)~1u;
     root = disk + 4u*BS;
     file = root + inode_size;
     inode_init(root, version, 0x41edu, 3u * stride, 8u);
@@ -228,7 +232,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
             return fail("Missing strict V2 functionality or false capability");
         if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version ||
            core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
-           volume_info.variant!=version)
+           volume_info.variant!=version || volume_info.free_bytes!=2u*BS)
             return fail("V2 probe/mount failed on real Minix media");
         old=opened;
         if(core->stat(opened,"/HELLO.TXT",&name_info)!=IFS_FS_OK ||
@@ -260,7 +264,8 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         }
         if(core->write(opened,"/HELLO.TXT",0u,"X",1u)!=IFS_FS_ACCESS ||
            volume_ops->query(opened,&volume_info)!=IFS_FS_OK ||
-           volume_info.variant!=version || volume_ops->format ||
+           volume_info.variant!=version ||
+           volume_info.free_bytes!=2u*BS || volume_ops->format ||
            core->create || core->truncate)
             return fail("V2 unsupported mutation capability falsely accepted");
         {

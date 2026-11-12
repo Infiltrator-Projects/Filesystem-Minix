@@ -15,6 +15,7 @@ static struct {
     uintptr_t generation, active;
     IfsFsHostRuntimeV2 host;
     IfsMinixVolume media;
+    uint64_t verified_free_zones;
 } session;
 
 static const IfsMinixModule *native(void)
@@ -102,6 +103,53 @@ static int live(void *volume)
 {
     return session.active!=0u && (uintptr_t)volume==session.active;
 }
+/* Count actual unallocated Minix data zones using the authoritative
+ * first_data_zone -> zmap bit-1 rule from the native Minix inode reader.
+ * Only Common V2 sector-aligned host I/O is used, never a pathname or
+ * retired V1 services. A malformed/short bitmap cannot yield free_bytes. */
+static int count_free_zones(const IfsMinixVolume *v,
+                            const IfsFsHostRuntimeV2 *h,
+                            uint64_t *free_zones)
+{
+    const uint64_t data_zones=(uint64_t)v->zone_count-v->first_data_zone;
+    const uint64_t needed_bits=data_zones+1u;
+    const uint64_t bitmap_bits=(uint64_t)v->bitmap_zone_blocks *
+                                v->block_bytes * 8u;
+    const uint64_t map_base=(2u+(uint64_t)v->bitmap_inode_blocks) *
+                             v->block_bytes;
+    uint64_t free_total=0u;
+    if(!h || !free_zones || !v->block_bytes || !v->bitmap_zone_blocks ||
+       v->first_data_zone>=v->zone_count || needed_bits>bitmap_bits ||
+       map_base>h->volume_bytes ||
+       (uint64_t)v->bitmap_zone_blocks*v->block_bytes >
+           h->volume_bytes-map_base)
+        return IFS_FS_CORRUPT;
+    uint8_t *raw=h->allocate(h->context,v->block_bytes);
+    if(!raw)return IFS_FS_NO_MEMORY;
+    int rc=IFS_FS_OK;
+    for(uint32_t group=0u;group<v->bitmap_zone_blocks;++group) {
+        uint64_t first=(uint64_t)group*v->block_bytes*8u;
+        if(first>=needed_bits)break;
+        uint64_t count=needed_bits-first;
+        if(count>(uint64_t)v->block_bytes*8u)
+            count=(uint64_t)v->block_bytes*8u;
+        rc=ifs_fs_host_read_bytes_v2(
+            h,map_base+(uint64_t)group*v->block_bytes,
+            raw,v->block_bytes);
+        if(rc!=IFS_FS_OK)break;
+        if(group==0u && !(raw[0]&1u)) {
+            rc=IFS_FS_CORRUPT;break; /* reserved zmap bit zero */
+        }
+        for(uint64_t bit=0u;bit<count;++bit) {
+            if(first+bit==0u)continue;
+            free_total+=(raw[bit>>3u] &
+                (uint8_t)(1u<<(bit&7u)))==0u;
+        }
+    }
+    h->release(h->context,raw);
+    if(rc==IFS_FS_OK)*free_zones=free_total;
+    return rc;
+}
 static void describe(IfsFsVolumeInfoV2 *info)
 {
     info->structure_bytes=sizeof(*info);
@@ -109,8 +157,9 @@ static void describe(IfsFsVolumeInfoV2 *info)
     info->block_bytes=session.media.block_bytes;
     info->max_name_bytes=session.media.name_bytes;
     info->total_bytes=session.media.volume_bytes;
-    /* No independently verified free-block count exists in this parser. */
-    info->free_bytes=0u;
+    /* Only the verified data-zone allocation bitmap is counted. */
+    info->free_bytes=session.verified_free_zones*
+                     session.media.block_bytes;
 }
 static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
                         IfsFsVolumeInfoV2 *info)
@@ -128,6 +177,14 @@ static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
         memset(&session.media,0,sizeof(session.media));
         return IFS_FS_CORRUPT;
     }
+    int bitmap_rc=count_free_zones(&session.media,&session.host,
+                                   &session.verified_free_zones);
+    if(bitmap_rc!=IFS_FS_OK) {
+        memset(&session.host,0,sizeof(session.host));
+        memset(&session.media,0,sizeof(session.media));
+        session.verified_free_zones=0u;
+        return bitmap_rc;
+    }
     session.active=++session.generation;
     describe(info);
     *out=(void *)session.active;
@@ -139,6 +196,7 @@ static int unmount_volume(void *volume)
     session.active=0u;
     memset(&session.host,0,sizeof(session.host));
     memset(&session.media,0,sizeof(session.media));
+    session.verified_free_zones=0u;
     return IFS_FS_OK;
 }
 static int volume_query(void *volume,IfsFsVolumeInfoV2 *info)
