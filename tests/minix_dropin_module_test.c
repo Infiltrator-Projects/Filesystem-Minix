@@ -230,6 +230,14 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            defrag_map->plan || defrag_map->execute || defrag_map->verify ||
            defrag_map->recover || defrag_map->release_plan)
             return fail("Missing strict V2 functionality or false capability");
+        /* A reserved zmap bit is not allocatable data. The hosted V2
+         * bitmap verifier must refuse the corrupted map, not claim
+         * measured zero free space or accept a partial transaction. */
+        disk[3u*BS] &= (uint8_t)~1u;
+        volume_info.structure_bytes=sizeof(volume_info);
+        if(core->mount(&host,&opened,&volume_info)!=IFS_FS_CORRUPT || opened)
+            return fail("Common V2 accepted a corrupt zone bitmap");
+        disk[3u*BS] |= 1u;
         if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version ||
            core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
            volume_info.variant!=version || volume_info.free_bytes!=2u*BS)

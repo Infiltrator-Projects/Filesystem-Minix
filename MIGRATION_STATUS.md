@@ -14,3 +14,9 @@ VOLUME.QUERY. The read-only scanner uses authenticated host I/O and
 rejects truncated, invalid or reserved-bit-corrupt bitmaps. Existing
 native Minix file mapping and bounded overwrites remain unchanged;
 full transactional V2 DEFRAG.PLAN/EXECUTE/VERIFY/RECOVER remain absent.
+
+## Common V2 reserved-zone bitmap fail-closed regression (1.0.12)
+C regression test now corrupts the reserved first zmap bit on genuine
+synthetic Minix V1/V2/V3 media and verifies the V2 mount rejects it
+without manufacturing a free-space result; restoration must then pass.
+The earlier real free data-zone measurement remains unchanged.
