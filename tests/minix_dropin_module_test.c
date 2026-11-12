@@ -186,6 +186,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         const IfsFsModuleApiV2 *common=infiltrator_filesystem_api_v2();
         const IfsFsCoreOpsV2 *core;
         const IfsFsVolumeOpsV2 *volume_ops;
+        const IfsFsDefragOpsV2 *defrag_map;
         IfsFsHostRuntimeV2 host={0};
         IfsFsVolumeInfoV2 volume_info={0};
         IfsFsEntryV2 name_info={0};
@@ -210,15 +211,20 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         if(!ifs_fs_host_v2_valid(&host) ||
            !ifs_fs_api_v2_valid(common,"minix") ||
            common->group_mask!=(IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
-                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)) ||
+                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
+                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)) ||
            (common->runtime_profiles & IFS_FS_PROFILE_KERNEL))
             return fail("strict Common V2 ABI or host invalid");
         core=(const IfsFsCoreOpsV2 *)ifs_fs_group_v2(common,IFS_FS_GROUP_CORE);
         volume_ops=(const IfsFsVolumeOpsV2 *)ifs_fs_group_v2(common,IFS_FS_GROUP_VOLUME);
+        defrag_map=(const IfsFsDefragOpsV2 *)ifs_fs_group_v2(common,IFS_FS_GROUP_DEFRAG);
         if(!core || !core->probe || !core->mount || !core->unmount ||
            !core->stat || !core->directory_entry || !core->read || !core->write ||
            !volume_ops || !volume_ops->query || !volume_ops->sync ||
-           volume_ops->format || ifs_fs_group_v2(common,IFS_FS_GROUP_DEFRAG))
+           volume_ops->format || !defrag_map || !defrag_map->map ||
+           defrag_map->header.capabilities!=IFS_FS_DEFRAG_MAP ||
+           defrag_map->plan || defrag_map->execute || defrag_map->verify ||
+           defrag_map->recover || defrag_map->release_plan)
             return fail("Missing strict V2 functionality or false capability");
         if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version ||
            core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
@@ -233,6 +239,25 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
            byte!='A')
             return fail("V2 native directory or file data mismatch");
+        /* Exact physical mapping via Common V2, paginated across the
+         * direct and indirect Minix zone pointers on real synthetic media. */
+        {
+            IfsFsExtentV2 page[4]={{0}};
+            uint32_t n=99u;
+            if(defrag_map->map(opened,"/HELLO.TXT",0u,page,4u,&n)!=IFS_FS_OK ||
+               n!=4u || page[0].physical_offset!=10u*BS ||
+               page[0].logical_offset!=0u || page[0].length!=BS ||
+               page[3].physical_offset!=13u*BS ||
+               page[3].logical_offset!=3u*BS ||
+               defrag_map->map(opened,"/HELLO.TXT",7u,page,4u,&n)!=IFS_FS_OK ||
+               n!=3u || page[0].physical_offset!=20u*BS ||
+               page[2].physical_offset!=22u*BS || page[2].length!=5u ||
+               defrag_map->map(opened,"/HELLO.TXT",10u,page,4u,&n)!=IFS_FS_END ||
+               n!=0u ||
+               defrag_map->map(opened,"/",0u,page,4u,&n)!=IFS_FS_UNSUPPORTED ||
+               defrag_map->map(opened,"/../HELLO.TXT",0u,page,4u,&n)!=IFS_FS_INVALID)
+                return fail("strict Common V2 extent-map pagination/identity failed");
+        }
         if(core->write(opened,"/HELLO.TXT",0u,"X",1u)!=IFS_FS_ACCESS ||
            volume_ops->query(opened,&volume_info)!=IFS_FS_OK ||
            volume_info.variant!=version || volume_ops->format ||

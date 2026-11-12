@@ -216,6 +216,14 @@ static int data_zone(const IfsMinixVolume *v, const IfsMinixInode *f,
     *zone = ptr;
     return 0;
 }
+/* Use the one bitmap-checked native indirect zone walker for Common V2 MAP.
+ * No disk offsets or Minix metadata interpretation enter Defragmenter. */
+int ifs_minix_data_zone(const IfsMinixVolume *v, const IfsMinixInode *inode,
+                        uint64_t logical_block, uint32_t *zone)
+{
+    if (!v || !inode || !zone) return -1;
+    return data_zone(v, inode, logical_block, zone);
+}
 static int read_file(const IfsMinixVolume *v, const IfsMinixInode *f,
                      uint64_t position, void *buffer, uint32_t bytes)
 {

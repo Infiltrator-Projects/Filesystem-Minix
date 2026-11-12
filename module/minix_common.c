@@ -292,6 +292,58 @@ static int write_file(void *volume,const char *path,uint64_t at,
         &io,&session.media,&inode,at,data,length)==0?
         IFS_FS_OK:IFS_FS_IO_ERROR;
 }
+/* Strict Common V2 per-file mapping. An unsupported sparse file is NOT
+ * reported as a fake physical extent. Every returned zone comes from the
+ * original Minix parser and its allocation bitmap validation. */
+static int map_file(void *volume,const char *path,uint64_t first,
+                    IfsFsExtentV2 *out,uint32_t capacity,uint32_t *written)
+{
+    IfsMinixInode inode;
+    uint32_t zones[64];
+    uint64_t total,count;
+    int rc;
+    if(!live(volume)||!path||!out||!written||!capacity||capacity>64u)
+        return IFS_FS_INVALID;
+    *written=0u;
+    rc=resolve(path,&inode,NULL,NULL);
+    if(rc)return rc;
+    if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR ||
+       !session.media.block_bytes)
+        return IFS_FS_UNSUPPORTED;
+    total=((uint64_t)inode.size_bytes+session.media.block_bytes-1u)/
+          session.media.block_bytes;
+    if(first>=total)return IFS_FS_END;
+    count=total-first;
+    if(count>capacity)count=capacity;
+    /* Preflight a whole page before exposing any output. No I/O writes. */
+    for(uint64_t i=0u;i<count;++i) {
+        uint64_t position;
+        if(ifs_minix_data_zone(&session.media,&inode,first+i,&zones[i])!=0)
+            return IFS_FS_CORRUPT;
+        if(!zones[i])return IFS_FS_UNSUPPORTED;
+        position=(uint64_t)zones[i]*session.media.block_bytes;
+        if(position>=session.media.volume_bytes ||
+           session.media.block_bytes>session.media.volume_bytes-position)
+            return IFS_FS_CORRUPT;
+    }
+    for(uint64_t i=0u;i<count;++i) {
+        const uint64_t logical=(first+i)*session.media.block_bytes;
+        const uint64_t remaining=(uint64_t)inode.size_bytes-logical;
+        out[i].logical_offset=logical;
+        out[i].physical_offset=(uint64_t)zones[i]*session.media.block_bytes;
+        out[i].length=remaining<session.media.block_bytes?
+                      remaining:session.media.block_bytes;
+        out[i].flags=0u;
+        out[i].reserved=0u;
+    }
+    *written=(uint32_t)count;
+    return IFS_FS_OK;
+}
+static const IfsFsDefragOpsV2 defrag_map_ops={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsDefragOpsV2),
+             IFS_FS_GROUP_DEFRAG,0u,IFS_FS_DEFRAG_MAP},
+    .map=map_file
+};
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
              IFS_FS_GROUP_CORE,0u,
@@ -314,6 +366,7 @@ static const IfsFsGroupHeaderV2 *query_group(
         return NULL;
     if(id==IFS_FS_GROUP_CORE)return &core.header;
     if(id==IFS_FS_GROUP_VOLUME)return &volume_ops.header;
+    if(id==IFS_FS_GROUP_DEFRAG)return &defrag_map_ops.header;
     return NULL;
 }
 __attribute__((used,section(".ifsmeta")))
@@ -322,7 +375,8 @@ static const IfsFsModuleApiV2 api={
     IFS_FS_COMMON_ABI_V2,sizeof(IfsFsModuleApiV2),"minix",
     IFS_FS_PROFILE_HOSTED,
     IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
-        IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME),query_group
+        IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
+        IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG),query_group
 };
 __attribute__((visibility("default")))
 const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void)

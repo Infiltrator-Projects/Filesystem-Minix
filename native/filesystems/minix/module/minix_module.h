@@ -54,6 +54,10 @@ typedef struct {
                 uint64_t, void *, uint32_t);
 } IfsMinixModule;
 const IfsMinixModule *infiltrator_filesystem_module_v1(void);
+/* Source-internal mapping helper, not an exported compatibility ABI.
+ * Returns an allocated bitmap-checked physical zone or a sparse hole (0). */
+int ifs_minix_data_zone(const IfsMinixVolume *, const IfsMinixInode *,
+                        uint64_t logical_block, uint32_t *zone);
 
 /* Optional V2 API: only allocated bytes of existing REGULAR files can
  * be overwritten. V1 remains byte-for-byte compatible and read-only.
