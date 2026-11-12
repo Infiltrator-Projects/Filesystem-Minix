@@ -17,9 +17,9 @@ canonical core. That consolidation remains an explicit architectural task.
 
 ## Implemented application module
 
-- `MINIX.so` contains the module's C engine, identity metadata and V1
-  read-only entry point. Its V1 ABI is unchanged by later capability additions.
-- The V1 parser validates superblocks, inode allocation, directory records,
+- `MINIX.so` contains the module's C engine, identity metadata and the original
+  read-only entry point.
+- The module parser validates superblocks, inode allocation, directory records,
   file sizes, direct zones and single/double/triple-indirect tree mappings
   as applicable to the media version.
 - The V2 entry point independently advertises a *restricted* existing-file
