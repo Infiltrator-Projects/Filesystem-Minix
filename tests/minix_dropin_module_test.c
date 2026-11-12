@@ -127,10 +127,10 @@ static void fixture(uint32_t version, uint32_t namelen)
     }
     disk[2u * BS] = 7u;               /* reserved, root and file inodes */
     memset(disk + 3u * BS, 0xffu, BS);
-    /* Free two real data zones (30,31) that are not owned by the file.
+    /* Two unowned zones (40,41); preserve all indirect data/pointer
+     * fixtures, including the nested triple-indirect chain at 28..31.
      * Bit 1 corresponds to first_data_zone=8; bit 0 is reserved. */
-    disk[3u*BS+2u] &= (uint8_t)~(1u<<7u);
-    disk[3u*BS+3u] &= (uint8_t)~1u;
+    disk[3u*BS+4u] &= (uint8_t)~((1u<<1u)|(1u<<2u));
     root = disk + 4u*BS;
     file = root + inode_size;
     inode_init(root, version, 0x41edu, 3u * stride, 8u);
