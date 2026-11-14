@@ -170,7 +170,13 @@ static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
     *out=NULL;
     if(session.active || session.generation==UINTPTR_MAX)
         return IFS_FS_BUSY;
-    session.host=*h;
+    /* Preserve the caller's size-versioned V2 prefix without reading
+     * optional fields that an earlier host did not allocate. */
+    size_t host_bytes=h->structure_bytes<sizeof(session.host) ?
+        h->structure_bytes : sizeof(session.host);
+    memset(&session.host,0,sizeof(session.host));
+    memcpy(&session.host,h,host_bytes);
+    session.host.structure_bytes=(uint32_t)host_bytes;
     io=minix_io(&session.host);
     if(native()->mount(&session.media,&io)!=0) {
         memset(&session.host,0,sizeof(session.host));

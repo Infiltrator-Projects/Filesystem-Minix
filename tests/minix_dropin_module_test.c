@@ -238,6 +238,16 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         if(core->mount(&host,&opened,&volume_info)!=IFS_FS_CORRUPT || opened)
             return fail("Common V2 accepted a corrupt zone bitmap");
         disk[3u*BS] |= 1u;
+        volatile size_t short_bytes=IFS_FS_HOST_V2_BASE_BYTES;
+        IfsFsHostRuntimeV2 *short_host=malloc(short_bytes);
+        if(!short_host)return fail("Short V2 host allocation");
+        memcpy(short_host,&host,IFS_FS_HOST_V2_BASE_BYTES);
+        short_host->structure_bytes=IFS_FS_HOST_V2_BASE_BYTES;
+        if(core->mount(short_host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
+           core->unmount(opened)!=IFS_FS_OK)
+            return fail("Original short V2 host rejected");
+        free(short_host);
+        opened=NULL;volume_info.structure_bytes=sizeof(volume_info);
         if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version ||
            core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
            volume_info.variant!=version || volume_info.free_bytes!=2u*BS)
