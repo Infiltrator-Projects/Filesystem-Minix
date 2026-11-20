@@ -1,4 +1,4 @@
-name: Build combined Minix filesystem SO
+name: Build canonical Minix Common V2 filesystem SO
 on:
   push:
     branches: [main]
@@ -12,15 +12,15 @@ jobs:
         run: |
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-cmake --parallel 2
-      - name: Verify old filesystem API and new Defrag API
+      - name: Verify only canonical Common V2 and historical test regressions
         run: |
           ctest --test-dir build-cmake --output-on-failure
           test -f build-cmake/MINIX.so
-          nm -D build-cmake/MINIX.so | grep -F infiltrator_filesystem_module_v2
-          nm -D build-cmake/MINIX.so | grep -F infiltrator_filesystem_minix_defrag_v1
+          nm -D --defined-only build-cmake/MINIX.so | grep -F infiltrator_filesystem_api_v2
+          sh tests/check_production_v2.sh build-cmake/MINIX.so
       - uses: actions/upload-artifact@v4
         with:
-          name: MINIX-combined-so
+          name: MINIX-common-v2-so
           path: |
             build-cmake/MINIX.so
             docs/Minix.pdf
