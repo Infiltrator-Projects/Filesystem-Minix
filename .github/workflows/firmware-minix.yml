@@ -24,12 +24,12 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/minix-firmware"
           mkdir -p "$work"
-          boot=infiltrator-boot_0.1.69_amd64.deb
+          boot=infiltrator-boot_0.1.72_amd64.deb
           curl -fsSL --retry 3 \
-            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.69/$boot" \
+            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.72/$boot" \
             -o "$work/$boot"
           printf '%s  %s\n' \
-            73429727974a902372f7d2644d00bb1f527e42b4454f9f3cafbf8ef1ad6c9a8e \
+            baed6e8e3d8be51a61ea180e7f8d3b4fb204881a472795c518fe46dbfce1c9a5 \
             "$work/$boot" | sha256sum -c -
           dpkg-deb -x "$work/$boot" "$work/boot"
       - name: Require V2-only carrier and actual production validator
