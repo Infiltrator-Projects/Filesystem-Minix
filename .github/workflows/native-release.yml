@@ -116,10 +116,10 @@ jobs:
             if [[ "$tag_type" == tag ]]; then
               tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq '.object.sha')"
             fi
-            test "$tag_sha" = "$GITHUB_SHA" || {
-              echo "REFUSING: immutable release $tag is for $tag_sha" >&2
-              exit 1
-            }
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo "Immutable $tag belongs to $tag_sha; no new release without VERSION bump"
+              exit 0
+            fi
           elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
             echo "REFUSING: tag $tag exists without a verified release" >&2
             exit 1
