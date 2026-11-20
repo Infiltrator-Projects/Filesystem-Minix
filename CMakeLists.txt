@@ -16,17 +16,43 @@ FetchContent_MakeAvailable(infiltratr_common)
 # Common is a link-time dependency; its development files must not be installed
 # by this standalone filesystem package.
 set_property(DIRECTORY "${infiltratr_common_SOURCE_DIR}" PROPERTY EXCLUDE_FROM_ALL TRUE)
+# The independent firmware profile compiles the same Minix V1/V2/V3
+# native disk reader and Common V2 callbacks as the hosted package.
+set(MINIX_FIRMWARE_DIR "${CMAKE_CURRENT_BINARY_DIR}/firmware")
+set(MINIX_FIRMWARE_ELF "${MINIX_FIRMWARE_DIR}/MINIX.so")
+add_custom_command(OUTPUT "${MINIX_FIRMWARE_ELF}"
+ COMMAND "${CMAKE_COMMAND}" -S "${CMAKE_CURRENT_SOURCE_DIR}/module/firmware"
+  -B "${MINIX_FIRMWARE_DIR}" -DCMAKE_BUILD_TYPE=Release
+  "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+  "-DCOMMON_INCLUDE_DIR=${infiltratr_common_SOURCE_DIR}/include"
+ COMMAND "${CMAKE_COMMAND}" --build "${MINIX_FIRMWARE_DIR}" --parallel 2
+ DEPENDS module/firmware/CMakeLists.txt module/firmware/runtime.c
+  module/minix_common.c native/filesystems/minix/module/minix_module.c
+  "${infiltratr_common_SOURCE_DIR}/include/infiltratr/filesystem_module_v2.h"
+ VERBATIM)
+add_custom_target(minix-firmware-elf DEPENDS "${MINIX_FIRMWARE_ELF}")
+
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.h" "#define LD_VERSION \"${PROJECT_VERSION}\"\n")
-add_library(minix-driver SHARED native/minix_native.c native/minix_worker.c
+# Production ships Common V2 and the canonical source-owned engine only.
+add_library(minix-driver SHARED
  native/filesystems/minix/module/minix_module.c
- compat/legacy_services.c module/minix_defrag_module.c
- module/minix_common.c
- fixtures/minix_codec.c module/minix_fixture_bridge.c)
+ module/minix_common.c)
 set_source_files_properties(native/minix_worker.c PROPERTIES COMPILE_DEFINITIONS "main=ifs_minix_worker_main")
 set_source_files_properties(fixtures/minix_codec.c PROPERTIES COMPILE_DEFINITIONS "ldtm_raw_minix=ifs_minix_raw_fixture")
 set_target_properties(minix-driver PROPERTIES PREFIX "" OUTPUT_NAME "MINIX" SUFFIX ".so")
+add_dependencies(minix-driver minix-firmware-elf)
+set_property(TARGET minix-driver APPEND PROPERTY LINK_DEPENDS "${MINIX_FIRMWARE_ELF}")
+add_custom_command(TARGET minix-driver POST_BUILD
+ COMMAND "${CMAKE_OBJCOPY}" --add-section
+  ".infiltrator_boot=${MINIX_FIRMWARE_ELF}"
+  --set-section-flags .infiltrator_boot=readonly
+  "$<TARGET_FILE:minix-driver>"
+ VERBATIM)
 target_compile_definitions(minix-driver PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
-target_compile_options(minix-driver PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(minix-driver PRIVATE
+ -Wall -Wextra -Wpedantic -Werror -fvisibility=hidden)
+target_link_options(minix-driver PRIVATE
+ -Wl,-z,defs -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/module/v2-only.map)
 target_link_options(minix-driver PRIVATE -Wl,-z,defs)
 target_include_directories(minix-driver PRIVATE
  "${CMAKE_CURRENT_SOURCE_DIR}/native" "${CMAKE_CURRENT_SOURCE_DIR}/compat"
@@ -35,9 +61,25 @@ target_include_directories(minix-driver PRIVATE
  "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(minix-driver PRIVATE InfiltratrCommon::Common OpenSSL::Crypto)
 if(BUILD_TESTING)
+ # Preserve historical native worker/fixture source in a noninstalled,
+ # test-only dependency, never linked into the production module.
+ add_library(minix-legacy-test-support SHARED
+  native/minix_native.c native/minix_worker.c
+  compat/legacy_services.c module/minix_defrag_module.c
+  fixtures/minix_codec.c module/minix_fixture_bridge.c)
+ target_compile_definitions(minix-legacy-test-support PRIVATE
+  _GNU_SOURCE _FILE_OFFSET_BITS=64)
+ target_include_directories(minix-legacy-test-support PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/native"
+  "${CMAKE_CURRENT_SOURCE_DIR}/compat"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/include"
+  "${CMAKE_CURRENT_BINARY_DIR}")
+ target_link_libraries(minix-legacy-test-support PRIVATE
+  InfiltratrCommon::Common OpenSSL::Crypto)
  add_executable(minix-defrag-test tests/test_defrag_module.c)
  target_include_directories(minix-defrag-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
- target_link_libraries(minix-defrag-test PRIVATE minix-driver)
+ target_link_libraries(minix-defrag-test PRIVATE minix-legacy-test-support)
  add_test(NAME minix-defrag-interface COMMAND minix-defrag-test)
  add_executable(minix-native-test
    tests/test_minix_native.c native/minix_native.c tests/generic_test_io.c)
@@ -54,6 +96,9 @@ if(BUILD_TESTING)
  target_link_libraries(minix-v1-v2-module-test PRIVATE InfiltratrCommon::Common)
  target_compile_definitions(minix-v1-v2-module-test PRIVATE IFS_TEST_COMMON_V2=1)
  add_test(NAME minix-original-v1-v2 COMMAND minix-v1-v2-module-test)
+ add_test(NAME minix-production-v2-only
+  COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_production_v2.sh"
+          "$<TARGET_FILE:minix-driver>")
 endif()
 install(TARGETS minix-driver LIBRARY DESTINATION /System/Filesystems)
 # Runtime payload: one filesystem shared object and its single PDF manual.
