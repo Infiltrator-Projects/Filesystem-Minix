@@ -45,9 +45,11 @@ static int io_flush(void *u)
 }
 #ifdef IFS_TEST_COMMON_V2
 static uint32_t common_sector=512u;
+static uint64_t fail_read_at=UINT64_MAX;
 static int common_read(void *ctx,uint64_t at,void *dst,uint32_t length)
 {
-    if(at%common_sector || length%common_sector || length>common_sector)
+    if(at==fail_read_at || at%common_sector ||
+       length%common_sector || length>common_sector)
         return -1;
     return io_read(ctx,at,dst,length);
 }
@@ -230,6 +232,14 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            defrag_map->plan || defrag_map->execute || defrag_map->verify ||
            defrag_map->recover || defrag_map->release_plan)
             return fail("Missing strict V2 functionality or false capability");
+        /* A true host transport failure is not a missing filesystem.
+         * The failed 512-byte transfer must propagate through V2. */
+        fail_read_at=1024u;
+        if(core->probe(&host,&detected)!=IFS_FS_IO_ERROR)
+            return fail("Common V2 probe hid a native media I/O error");
+        fail_read_at=UINT64_MAX;
+        if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version)
+            return fail("Common V2 probe did not recover after I/O failure");
         /* A reserved zmap bit is not allocatable data. The hosted V2
          * bitmap verifier must refuse the corrupted map, not claim
          * measured zero free space or accept a partial transaction. */

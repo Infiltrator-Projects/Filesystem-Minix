@@ -410,6 +410,7 @@ static int map_file(void *volume,const char *path,uint64_t first,
     if(!live(volume)||!path||!out||!written||!capacity||capacity>64u)
         return IFS_FS_INVALID;
     *written=0u;
+    last_read_error=IFS_FS_OK;
     rc=resolve(path,&inode,NULL,NULL);
     if(rc)return rc;
     if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR ||
