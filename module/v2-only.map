@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Only Common V2 is exported. Native engines remain private to MINIX.so.
+ */
+{
+ global: infiltrator_filesystem_api_v2;
+ local: *;
+};
