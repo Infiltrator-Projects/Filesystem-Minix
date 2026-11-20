@@ -3,7 +3,7 @@
 #ifndef IFS_MINIX_MODULE_H
 #define IFS_MINIX_MODULE_H
 #include <stdint.h>
-#define IFS_MINIX_ABI_VERSION 1u
+#define IFS_MINIX_NATIVE_TABLE_VERSION 1u
 #define IFS_MINIX_CAP_PROBE UINT64_C(1)
 #define IFS_MINIX_CAP_DIRECTORY UINT64_C(2)
 #define IFS_MINIX_CAP_FILE_READ UINT64_C(4)
@@ -53,19 +53,20 @@ typedef struct {
     int (*read)(const IfsMinixVolume *, const IfsMinixInode *,
                 uint64_t, void *, uint32_t);
 } IfsMinixModule;
-const IfsMinixModule *infiltrator_filesystem_module_v1(void);
+/* Native engine helper, not a public filesystem ABI. */
+const IfsMinixModule *ifs_minix_native_read_ops(void);
 /* Source-internal mapping helper, not an exported compatibility ABI.
  * Returns an allocated bitmap-checked physical zone or a sparse hole (0). */
 int ifs_minix_data_zone(const IfsMinixVolume *, const IfsMinixInode *,
                         uint64_t logical_block, uint32_t *zone);
 
-/* Optional V2 API: only allocated bytes of existing REGULAR files can
- * be overwritten. V1 remains byte-for-byte compatible and read-only.
+/* Source-owned, bounded existing-file overwrite engine. Public operations
+ * are exposed through the canonical Common V2 API only.
  * Caller owns exclusive volume access and guarantees that read/write/flush
  * address the SAME underlying medium, without concurrent metadata mutation.
  * No rollback is claimed after a failed host I/O operation.
  */
-#define IFS_MINIX_V2_ABI_VERSION 2u
+#define IFS_MINIX_NATIVE_WRITER_VERSION 2u
 #define IFS_MINIX_V2_CAP_OVERWRITE_EXISTING UINT64_C(8)
 typedef int (*IfsMinixWriteAt)(void *user, uint64_t offset,
                               const void *buffer, uint32_t bytes);
@@ -79,7 +80,7 @@ typedef struct {
     uint32_t abi_version, structure_bytes;
     const char *format_id, *format_name;
     uint64_t capabilities;
-    const IfsMinixModule *readonly_v1;
+    const IfsMinixModule *readonly_engine;
     /* 0 = complete write+flush, -1 = rejected/failed; partial writes
      * may have occurred on I/O failure. Never changes allocation metadata. */
     int (*overwrite_existing)(const IfsMinixWritableIo *,
@@ -88,5 +89,6 @@ typedef struct {
                               uint64_t position, const void *bytes,
                               uint32_t length);
 } IfsMinixModuleV2;
-const IfsMinixModuleV2 *infiltrator_filesystem_module_v2(void);
+/* Native write engine. Its public host contract is Common V2 only. */
+const IfsMinixModuleV2 *ifs_minix_native_write_ops(void);
 #endif

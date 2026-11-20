@@ -411,31 +411,25 @@ static int overwrite_existing(const IfsMinixWritableIo *io,
     return io->flush(io->read.user) == 0 ? 0 : -1;
 }
 
-__attribute__((used, section(".ifsmeta")))
-static const char module_identity[] = "IFS-MODULE:minix:1";
 static const IfsMinixModule module = {
-    IFS_MINIX_ABI_VERSION, sizeof(IfsMinixModule),
+    IFS_MINIX_NATIVE_TABLE_VERSION, sizeof(IfsMinixModule),
     "minix", "Minix filesystem V1/V2/V3",
     IFS_MINIX_CAP_PROBE | IFS_MINIX_CAP_DIRECTORY |
     IFS_MINIX_CAP_FILE_READ,
     mount_volume, get_inode, directory_entry, directory_lookup, read_file
 };
-__attribute__((visibility("default")))
-const IfsMinixModule *infiltrator_filesystem_module_v1(void)
+const IfsMinixModule *ifs_minix_native_read_ops(void)
 {
     return &module;
 }
 
-__attribute__((used, section(".ifsmeta")))
-static const char module_identity_v2[] = "IFS-MODULE:minix:2";
 static const IfsMinixModuleV2 module_v2 = {
-    IFS_MINIX_V2_ABI_VERSION, sizeof(IfsMinixModuleV2),
+    IFS_MINIX_NATIVE_WRITER_VERSION, sizeof(IfsMinixModuleV2),
     "minix", "Minix V1/V2/V3 bounded existing-file overwrite",
     IFS_MINIX_V2_CAP_OVERWRITE_EXISTING, &module,
     overwrite_existing
 };
-__attribute__((visibility("default")))
-const IfsMinixModuleV2 *infiltrator_filesystem_module_v2(void)
+const IfsMinixModuleV2 *ifs_minix_native_write_ops(void)
 {
     return &module_v2;
 }

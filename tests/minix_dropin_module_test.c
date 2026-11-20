@@ -154,14 +154,14 @@ static void fixture(uint32_t version, uint32_t namelen)
 }
 static int run_variant(uint32_t version, uint32_t name_bytes)
 {
-    const IfsMinixModule *api = infiltrator_filesystem_module_v1();
+    const IfsMinixModule *api = ifs_minix_native_read_ops();
     IfsMinixVolume volume;
     IfsMinixInode root, file, forged;
     IfsMinixDirent dent;
     IfsMinixIo io = {io_read, NULL, sizeof disk};
     uint8_t bytes[8];
     fixture(version, name_bytes);
-    if (!api || api->abi_version != IFS_MINIX_ABI_VERSION ||
+    if (!api || api->abi_version != IFS_MINIX_NATIVE_TABLE_VERSION ||
         api->structure_bytes != sizeof *api ||
         api->capabilities != (IFS_MINIX_CAP_PROBE | IFS_MINIX_CAP_DIRECTORY |
                               IFS_MINIX_CAP_FILE_READ))
@@ -344,13 +344,13 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
     if (api->read(&volume, &file, 9u*BS+5u, bytes, 1u) == 0)
         return fail("accepted read beyond EOF");
     {
-        const IfsMinixModuleV2 *v2 = infiltrator_filesystem_module_v2();
+        const IfsMinixModuleV2 *v2 = ifs_minix_native_write_ops();
         IfsMinixWritableIo rw = {{io_read, NULL, sizeof disk},
                                   io_write, io_flush};
         writes = flushes = 0u;
-        if (!v2 || v2->abi_version != IFS_MINIX_V2_ABI_VERSION ||
+        if (!v2 || v2->abi_version != IFS_MINIX_NATIVE_WRITER_VERSION ||
             v2->structure_bytes != sizeof *v2 ||
-            v2->readonly_v1 != api ||
+            v2->readonly_engine != api ||
             v2->capabilities != IFS_MINIX_V2_CAP_OVERWRITE_EXISTING)
             return fail("V2 ABI/capability compatibility mismatch");
         if (v2->overwrite_existing(&rw, &volume, &file,

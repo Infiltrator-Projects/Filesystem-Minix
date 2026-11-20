@@ -20,7 +20,7 @@ static struct {
 
 static const IfsMinixModule *native(void)
 {
-    return infiltrator_filesystem_module_v1();
+    return ifs_minix_native_read_ops();
 }
 static int host_ok(const IfsFsHostRuntimeV2 *host)
 {
@@ -31,6 +31,7 @@ static int host_read(void *context,uint64_t position,void *data,uint32_t n)
     return ifs_fs_host_read_bytes_v2(
         (const IfsFsHostRuntimeV2 *)context,position,data,n)==IFS_FS_OK?0:-1;
 }
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
 /* The existing Minix overwrite engine can request byte-granular writes.
  * V2's only authorised device writes are complete logical sectors, so
  * preserve every neighbouring byte with a bounded read/modify/write.
@@ -78,6 +79,8 @@ done:
     h->release(h->context,scratch);
     return result;
 }
+#endif /* !IFS_MINIX_FIRMWARE_BUILD */
+
 static int host_flush(void *context)
 {
     const IfsFsHostRuntimeV2 *h=context;
@@ -331,6 +334,7 @@ static int read_file(void *volume,const char *path,uint64_t at,
     return native()->read(&session.media,&inode,at,data,length)==0?
         IFS_FS_OK:IFS_FS_IO_ERROR;
 }
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
 static int write_file(void *volume,const char *path,uint64_t at,
                       const void *data,uint32_t length)
 {
@@ -352,10 +356,12 @@ static int write_file(void *volume,const char *path,uint64_t at,
     io.read=minix_io(&session.host);
     io.write_at=host_write;
     io.flush=host_flush;
-    return infiltrator_filesystem_module_v2()->overwrite_existing(
+    return ifs_minix_native_write_ops()->overwrite_existing(
         &io,&session.media,&inode,at,data,length)==0?
         IFS_FS_OK:IFS_FS_IO_ERROR;
 }
+#endif /* !IFS_MINIX_FIRMWARE_BUILD */
+
 /* Strict Common V2 per-file mapping. An unsupported sparse file is NOT
  * reported as a fake physical extent. Every returned zone comes from the
  * original Minix parser and its allocation bitmap validation. */
@@ -412,10 +418,17 @@ static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
              IFS_FS_GROUP_CORE,0u,
              IFS_FS_CORE_PROBE|IFS_FS_CORE_MOUNT|IFS_FS_CORE_STAT|
+#if defined(IFS_MINIX_FIRMWARE_BUILD)
+             IFS_FS_CORE_LIST|IFS_FS_CORE_READ},
+#else
              IFS_FS_CORE_LIST|IFS_FS_CORE_READ|IFS_FS_CORE_WRITE},
+#endif
     .probe=probe,.mount=mount_volume,.unmount=unmount_volume,
     .stat=stat_path,.directory_entry=directory_entry,
-    .read=read_file,.write=write_file
+    .read=read_file
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+    ,.write=write_file
+#endif
 };
 static const IfsFsVolumeOpsV2 volume_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsVolumeOpsV2),
@@ -437,7 +450,11 @@ __attribute__((used,section(".ifsmeta")))
 static const char identity[]="IFS-MODULE:minix:common2";
 static const IfsFsModuleApiV2 api={
     IFS_FS_COMMON_ABI_V2,sizeof(IfsFsModuleApiV2),"minix",
+#if defined(IFS_MINIX_FIRMWARE_BUILD)
+    IFS_FS_PROFILE_FREESTANDING|IFS_FS_PROFILE_FIRMWARE,
+#else
     IFS_FS_PROFILE_HOSTED,
+#endif
     IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
         IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
         IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG),query_group
