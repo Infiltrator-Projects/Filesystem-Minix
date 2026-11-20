@@ -17,6 +17,9 @@ static struct {
     IfsMinixVolume media;
     uint64_t verified_free_zones;
 } session;
+/* The native parser's callback is boolean, but Common V2 must preserve
+ * transport errors instead of reporting a missing file or corrupt media. */
+static int last_read_error = IFS_FS_OK;
 
 static const IfsMinixModule *native(void)
 {
@@ -28,8 +31,10 @@ static int host_ok(const IfsFsHostRuntimeV2 *host)
 }
 static int host_read(void *context,uint64_t position,void *data,uint32_t n)
 {
-    return ifs_fs_host_read_bytes_v2(
-        (const IfsFsHostRuntimeV2 *)context,position,data,n)==IFS_FS_OK?0:-1;
+    const int rc = ifs_fs_host_read_bytes_v2(
+        (const IfsFsHostRuntimeV2 *)context,position,data,n);
+    if(rc!=IFS_FS_OK)last_read_error=rc;
+    return rc==IFS_FS_OK?0:-1;
 }
 #if !defined(IFS_MINIX_FIRMWARE_BUILD)
 /* The existing Minix overwrite engine can request byte-granular writes.
@@ -95,10 +100,26 @@ static int probe(const IfsFsHostRuntimeV2 *h,uint32_t *variant)
 {
     IfsMinixVolume media={0};
     IfsMinixIo io;
+    uint8_t superblock[64];
+    uint16_t legacy_magic, v3_magic;
+    int rc;
     if(!variant || !host_ok(h))return IFS_FS_INVALID;
     *variant=0u;
+    /* The V1/V2 and V3 Minix superblocks have distinct magic offsets.
+     * First inspect the on-disk identity through the V2 host, so absence,
+     * corruption and block transport errors are distinguishable. */
+    rc=ifs_fs_host_read_bytes_v2(h,1024u,superblock,sizeof(superblock));
+    if(rc!=IFS_FS_OK)return rc;
+    legacy_magic=(uint16_t)(superblock[16] | ((uint16_t)superblock[17]<<8));
+    v3_magic=(uint16_t)(superblock[24] | ((uint16_t)superblock[25]<<8));
+    if(legacy_magic!=0x137fu && legacy_magic!=0x138fu &&
+       legacy_magic!=0x2468u && legacy_magic!=0x2478u &&
+       v3_magic!=0x4d5au)
+        return IFS_FS_NOT_FOUND;
     io=minix_io(h);
-    if(native()->mount(&media,&io)!=0)return IFS_FS_NOT_FOUND;
+    last_read_error=IFS_FS_OK;
+    if(native()->mount(&media,&io)!=0)
+        return last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
     *variant=media.version;
     return IFS_FS_OK;
 }
@@ -168,11 +189,15 @@ static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
                         IfsFsVolumeInfoV2 *info)
 {
     IfsMinixIo io;
+    uint32_t variant;
+    int probe_rc;
     if(!out || !info || info->structure_bytes<sizeof(*info) || !host_ok(h))
         return IFS_FS_INVALID;
     *out=NULL;
     if(session.active || session.generation==UINTPTR_MAX)
         return IFS_FS_BUSY;
+    probe_rc=probe(h,&variant);
+    if(probe_rc!=IFS_FS_OK)return probe_rc;
     /* Preserve the caller's size-versioned V2 prefix without reading
      * optional fields that an earlier host did not allocate. */
     size_t host_bytes=h->structure_bytes<sizeof(session.host) ?
@@ -181,10 +206,13 @@ static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
     memcpy(&session.host,h,host_bytes);
     session.host.structure_bytes=(uint32_t)host_bytes;
     io=minix_io(&session.host);
+    last_read_error=IFS_FS_OK;
     if(native()->mount(&session.media,&io)!=0) {
+        const int result=last_read_error!=IFS_FS_OK?
+            last_read_error:IFS_FS_CORRUPT;
         memset(&session.host,0,sizeof(session.host));
         memset(&session.media,0,sizeof(session.media));
-        return IFS_FS_CORRUPT;
+        return result;
     }
     int bitmap_rc=count_free_zones(&session.media,&session.host,
                                    &session.verified_free_zones);
@@ -227,9 +255,10 @@ static int resolve(const char *path,IfsMinixInode *inode,
                    const char **basename,uint32_t *bytes)
 {
     const char *p;
-    if(!session.active || !path || path[0]!='/' || !inode ||
-       native()->inode(&session.media,1u,inode)!=0)
+    if(!session.active || !path || path[0]!='/' || !inode)
         return IFS_FS_INVALID;
+    if(native()->inode(&session.media,1u,inode)!=0)
+        return last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
     p=path+1;
     if(!*p) {
         if(basename)*basename="/";
@@ -250,9 +279,10 @@ static int resolve(const char *path,IfsMinixInode *inode,
         if((inode->mode&0xf000u)!=IFS_MINIX_MODE_DIRECTORY)
             return IFS_FS_NOT_FOUND;
         rc=native()->lookup(&session.media,inode,start,(uint32_t)n,&dent);
-        if(rc!=0)return rc==1?IFS_FS_NOT_FOUND:IFS_FS_CORRUPT;
+        if(rc!=0)return rc==1?IFS_FS_NOT_FOUND:
+            last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
         if(native()->inode(&session.media,dent.inode_number,inode)!=0)
-            return IFS_FS_CORRUPT;
+            return last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
         if(basename)*basename=start;
         if(bytes)*bytes=(uint32_t)n;
         if(*p=='/' && !*++p)return IFS_FS_INVALID;
@@ -287,6 +317,7 @@ static int stat_path(void *volume,const char *path,IfsFsEntryV2 *out)
     uint32_t bytes=0;
     int rc;
     if(!live(volume))return IFS_FS_INVALID;
+    last_read_error=IFS_FS_OK;
     rc=resolve(path,&inode,&name,&bytes);
     return rc?rc:fill(out,&inode,name,bytes);
 }
@@ -297,6 +328,7 @@ static int directory_entry(void *volume,const char *path,uint32_t index,
     uint32_t returned=0u;
     int rc;
     if(!live(volume))return IFS_FS_INVALID;
+    last_read_error=IFS_FS_OK;
     rc=resolve(path,&directory,NULL,NULL);
     if(rc)return rc;
     if((directory.mode&0xf000u)!=IFS_MINIX_MODE_DIRECTORY)
@@ -306,7 +338,8 @@ static int directory_entry(void *volume,const char *path,uint32_t index,
         const char *zero;
         uint32_t len;
         rc=native()->entry(&session.media,&directory,i,&dent);
-        if(rc)return rc==1?IFS_FS_END:IFS_FS_CORRUPT;
+        if(rc)return rc==1?IFS_FS_END:
+            last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
         zero=memchr(dent.name,'\0',sizeof(dent.name));
         if(!zero)return IFS_FS_CORRUPT;
         len=(uint32_t)(zero-dent.name);
@@ -315,7 +348,7 @@ static int directory_entry(void *volume,const char *path,uint32_t index,
             continue;
         if(returned++!=index)continue;
         if(native()->inode(&session.media,dent.inode_number,&file)!=0)
-            return IFS_FS_CORRUPT;
+            return last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
         return fill(out,&file,dent.name,len);
     }
 }
@@ -325,6 +358,7 @@ static int read_file(void *volume,const char *path,uint64_t at,
     IfsMinixInode inode;
     int rc;
     if(!live(volume) || (!data && length))return IFS_FS_INVALID;
+    last_read_error=IFS_FS_OK;
     rc=resolve(path,&inode,NULL,NULL);
     if(rc)return rc;
     if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR)
@@ -332,7 +366,8 @@ static int read_file(void *volume,const char *path,uint64_t at,
     if(at>inode.size_bytes || length>inode.size_bytes-at)
         return IFS_FS_UNSUPPORTED;
     return native()->read(&session.media,&inode,at,data,length)==0?
-        IFS_FS_OK:IFS_FS_IO_ERROR;
+        IFS_FS_OK:
+        last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
 }
 #if !defined(IFS_MINIX_FIRMWARE_BUILD)
 static int write_file(void *volume,const char *path,uint64_t at,
