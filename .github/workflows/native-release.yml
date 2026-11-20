@@ -76,7 +76,7 @@ jobs:
           dpkg-deb -x dist/*.deb "$RUNNER_TEMP/extracted"
           test "$(find "$RUNNER_TEMP/extracted" -type f | wc -l)" = 2
           test -s "$RUNNER_TEMP/extracted/System/Filesystems/MINIX.so"
-          test -s "$RUNNER_TEMP/extracted/System/Resources/Documentation/Filesystem-MINIX.pdf"
+          test -s "$RUNNER_TEMP/extracted/System/Resources/Documentation/Filesystem-Minix.pdf"
           test "$(find "$RUNNER_TEMP/extracted" -name '*.ko' | wc -l)" = 0
       - name: Require exact-head V2 regression and production BOOT OVMF success
         env:
