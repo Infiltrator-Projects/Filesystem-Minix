@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Check the actual existing release carrier; do not rebuild or change BOOT.
+name: Validate released Common V2 SO against current production BOOT
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  published-module-current-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download SHA-256 pinned production BOOT 0.1.77
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/current-boot" "$RUNNER_TEMP/provider"
+          boot=infiltrator-boot_0.1.77_amd64.deb
+          curl -fsSL --retry 3             "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.77/$boot"             -o "$RUNNER_TEMP/current-boot/$boot"
+          printf '%s  %s\n'             4b2fa8eaa116b7e719329c5bbaa39ee3a093fbe1c1eac0c57440d0f82217d8a5             "$RUNNER_TEMP/current-boot/$boot" | sha256sum -c -
+          dpkg-deb -x "$RUNNER_TEMP/current-boot/$boot" "$RUNNER_TEMP/current-boot/installed"
+      - name: Download and verify immutable published filesystem package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(tr -d '\r\n' < VERSION)
+          tag="v$version"
+          gh release download "$tag" -p '*.deb' -D "$RUNNER_TEMP/provider"
+          test "$(find "$RUNNER_TEMP/provider" -maxdepth 1 -name '*.deb' | wc -l)" -eq 1
+          deb=$(find "$RUNNER_TEMP/provider" -maxdepth 1 -name '*.deb' -print -quit)
+          expected=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag"             --jq '.assets[] | select(.name | endswith(".deb")) | .digest')
+          [[ "$expected" == sha256:* ]]
+          printf '%s  %s\n' "${expected#sha256:}" "$deb" | sha256sum -c -
+          dpkg-deb -x "$deb" "$RUNNER_TEMP/provider/root"
+          test -s "$RUNNER_TEMP/provider/root/System/Filesystems/MINIX.so"
+      - name: Verify real published SO with unmodified production validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          module="$RUNNER_TEMP/provider/root/System/Filesystems/MINIX.so"
+          validator="$RUNNER_TEMP/current-boot/installed/usr/lib/infiltrator-boot/validate-module"
+          test -x "$validator"
+          nm -D --defined-only "$module" | grep -F infiltrator_filesystem_api_v2
+          ! nm -D --defined-only "$module" | grep -E 'infiltrator_filesystem_.*_v1'
+          readelf -SW "$module" | grep -F .infiltrator_boot
+          "$validator" "$module"
+          echo "PUBLISHED_SO_BOOT_0_1_77_VALIDATOR_PASS MINIX.so"
