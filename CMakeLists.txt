@@ -58,7 +58,7 @@ target_include_directories(minix-driver PRIVATE
  "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/include"
  "${CMAKE_CURRENT_SOURCE_DIR}/native/filesystems/minix/module"
  "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(minix-driver PRIVATE InfiltratrCommon::Common OpenSSL::Crypto)
+target_link_libraries(minix-driver PRIVATE InfiltratrCommon::Common)
 if(BUILD_TESTING)
  add_executable(minix-native-test
    tests/test_minix_native.c native/minix_native.c tests/generic_test_io.c)
