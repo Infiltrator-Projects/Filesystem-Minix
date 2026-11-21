@@ -295,8 +295,12 @@ static int fill(IfsFsEntryV2 *out,const IfsMinixInode *inode,
 {
     uint32_t type;
     if(!out || out->structure_bytes<sizeof(*out) ||
-       !out->name || !name || bytes>=out->name_capacity)
+       !out->name || !name)
         return IFS_FS_INVALID;
+    /* An otherwise valid STAT/LIST request needs a larger caller buffer.
+     * Return capacity failure without writing a partial name or metadata. */
+    if(bytes>=out->name_capacity)
+        return IFS_FS_NO_SPACE;
     switch(inode->mode&0xf000u) {
     case IFS_MINIX_MODE_REGULAR:type=IFS_FS_ENTRY_FILE;break;
     case IFS_MINIX_MODE_DIRECTORY:type=IFS_FS_ENTRY_DIRECTORY;break;
