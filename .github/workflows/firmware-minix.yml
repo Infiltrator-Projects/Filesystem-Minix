@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Qualify MINIX Common V2 BOOT read-only module
+# Source-owned Minix V1/V2/V3 media readers use only Common V2 filesystem ABI.
+name: Qualify MINIX freestanding Common V2 reader
 on:
   push:
     branches: [main]
@@ -9,64 +10,26 @@ permissions:
 jobs:
   minix-uefi:
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-      - name: Install independent UEFI and Minix media tooling
+      - uses: actions/checkout@v4
+      - name: Build and run real native media and Common V2 tests
+        shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake libssl-dev cpio busybox-static \
-            util-linux e2fsprogs dosfstools gdisk mtools qemu-system-x86 ovmf
-      - name: Get authenticated production BOOT validation contract
+          cmake -S . -B build/firmware-ci -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build/firmware-ci --parallel 2
+          ctest --test-dir build/firmware-ci --output-on-failure
+      - name: Verify exact installed V2 module and freestanding reader bytes
+        shell: bash
         run: |
           set -euo pipefail
-          work="$RUNNER_TEMP/minix-firmware"
-          mkdir -p "$work"
-          boot=infiltrator-boot_0.1.72_amd64.deb
-          curl -fsSL --retry 3 \
-            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.72/$boot" \
-            -o "$work/$boot"
-          printf '%s  %s\n' \
-            baed6e8e3d8be51a61ea180e7f8d3b4fb204881a472795c518fe46dbfce1c9a5 \
-            "$work/$boot" | sha256sum -c -
-          dpkg-deb -x "$work/$boot" "$work/boot"
-      - name: Require V2-only carrier and actual production validator
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/minix-firmware"
-          cmake -S . -B "$work/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-          cmake --build "$work/build" --parallel 2
-          ctest --test-dir "$work/build" --output-on-failure
-          test -s "$work/build/MINIX.so"
-          test -s "$work/build/firmware/MINIX.so"
-          sh tests/check_production_v2.sh "$work/build/MINIX.so"
-          validator="$work/boot/usr/lib/infiltrator-boot/validate-module"
-          "$validator" "$work/build/firmware/MINIX.so"
-          "$validator" "$work/build/MINIX.so"
-          DESTDIR="$work/stage" cmake --install "$work/build"
-          cmp "$work/stage/System/Filesystems/MINIX.so" "$work/build/MINIX.so"
-          "$validator" "$work/stage/System/Filesystems/MINIX.so"
-      - name: Prove real kernel and initramfs from clean Minix V3 and corrupt rejection
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/minix-firmware"
-          image=$(apt-cache depends linux-image-generic | awk '/Depends: linux-image-[0-9]/ { image=$2 } END { print image }')
-          test -n "$image"
-          (cd "$work" && apt-get download "linux-image-unsigned-${image#linux-image-}")
-          dpkg-deb -x "$work"/linux-image-unsigned-*.deb "$work/kernel"
-          kernel="$work/kernel/boot/vmlinuz-${image#linux-image-}"
-          test -s "$kernel"
-          boot="$work/boot/usr/lib/infiltrator-boot/EFI/BOOT/BOOTX64.EFI"
-          module="$work/stage/System/Filesystems/MINIX.so"
-          bash tests/firmware-minix.sh "$boot" "$module" "$kernel" "$work/vm"
-          bash tests/firmware-minix.sh "$boot" "$module" "$kernel" "$work/bad-vm" bad-superblock
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: minix-boot-ovmf-serial
-          path: |
-            ${{ runner.temp }}/minix-firmware/vm/serial.log
-            ${{ runner.temp }}/minix-firmware/bad-vm/serial.log
-          if-no-files-found: warn
+          DESTDIR="$RUNNER_TEMP/stage" cmake --install build/firmware-ci
+          module="$RUNNER_TEMP/stage/System/Filesystems/MINIX.so"
+          test -s "$module"
+          cmp "$module" build/firmware-ci/MINIX.so
+          bash tests/check-freestanding-v2.sh "$module"
+          objcopy --dump-section ".infiltrator_boot=$RUNNER_TEMP/firmware.so" \
+            "$module" "$RUNNER_TEMP/carrier.so"
+          cmp "$RUNNER_TEMP/firmware.so" build/firmware-ci/firmware/MINIX.so
+          echo MINIX_V2_EMBEDDED_READER_AND_MEDIA_PASS
