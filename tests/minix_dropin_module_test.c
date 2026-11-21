@@ -235,9 +235,17 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         /* A true host transport failure is not a missing filesystem.
          * The failed 512-byte transfer must propagate through V2. */
         fail_read_at=1024u;
-        if(core->probe(&host,&detected)!=IFS_FS_IO_ERROR)
-            return fail("Common V2 probe hid a native media I/O error");
+        detected=UINT32_MAX;
+        if(core->probe(&host,&detected)!=IFS_FS_IO_ERROR || detected!=0u)
+            return fail("Common V2 probe hid an I/O error or stale variant");
         fail_read_at=UINT64_MAX;
+        {
+            IfsFsHostRuntimeV2 invalid_host=host;
+            invalid_host.abi_version=1u;
+            detected=UINT32_MAX;
+            if(core->probe(&invalid_host,&detected)!=IFS_FS_INVALID || detected!=0u)
+                return fail("Invalid V2 host retained stale detected format");
+        }
         if(core->probe(&host,&detected)!=IFS_FS_OK || detected!=version)
             return fail("Common V2 probe did not recover after I/O failure");
         /* A reserved zmap bit is not allocatable data. The hosted V2
