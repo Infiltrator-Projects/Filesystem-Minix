@@ -4,7 +4,6 @@ string(STRIP "${MINIX_VERSION}" MINIX_VERSION)
 project(FilesystemMinix VERSION "${MINIX_VERSION}" LANGUAGES C)
 include(CTest)
 include(FetchContent)
-find_package(OpenSSL REQUIRED)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -61,26 +60,6 @@ target_include_directories(minix-driver PRIVATE
  "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(minix-driver PRIVATE InfiltratrCommon::Common OpenSSL::Crypto)
 if(BUILD_TESTING)
- # Preserve historical native worker/fixture source in a noninstalled,
- # test-only dependency, never linked into the production module.
- add_library(minix-legacy-test-support SHARED
-  native/minix_native.c native/minix_worker.c
-  compat/legacy_services.c module/minix_defrag_module.c
-  fixtures/minix_codec.c module/minix_fixture_bridge.c)
- target_compile_definitions(minix-legacy-test-support PRIVATE
-  _GNU_SOURCE _FILE_OFFSET_BITS=64)
- target_include_directories(minix-legacy-test-support PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/native"
-  "${CMAKE_CURRENT_SOURCE_DIR}/compat"
-  "${CMAKE_CURRENT_SOURCE_DIR}/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/include"
-  "${CMAKE_CURRENT_BINARY_DIR}")
- target_link_libraries(minix-legacy-test-support PRIVATE
-  InfiltratrCommon::Common OpenSSL::Crypto)
- add_executable(minix-defrag-test tests/test_defrag_module.c)
- target_include_directories(minix-defrag-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
- target_link_libraries(minix-defrag-test PRIVATE minix-legacy-test-support)
- add_test(NAME minix-defrag-interface COMMAND minix-defrag-test)
  add_executable(minix-native-test
    tests/test_minix_native.c native/minix_native.c tests/generic_test_io.c)
  target_include_directories(minix-native-test PRIVATE
@@ -89,13 +68,13 @@ if(BUILD_TESTING)
  target_compile_definitions(minix-native-test PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
  target_link_libraries(minix-native-test PRIVATE InfiltratrCommon::Common)
  add_test(NAME minix-original-native-and-fixtures COMMAND minix-native-test)
- add_executable(minix-v1-v2-module-test tests/minix_dropin_module_test.c
+ add_executable(minix-common-v2-media-test tests/minix_dropin_module_test.c
    native/filesystems/minix/module/minix_module.c module/minix_common.c)
- target_include_directories(minix-v1-v2-module-test PRIVATE
+ target_include_directories(minix-common-v2-media-test PRIVATE
    "${CMAKE_CURRENT_SOURCE_DIR}/native/filesystems/minix/module")
- target_link_libraries(minix-v1-v2-module-test PRIVATE InfiltratrCommon::Common)
- target_compile_definitions(minix-v1-v2-module-test PRIVATE IFS_TEST_COMMON_V2=1)
- add_test(NAME minix-original-v1-v2 COMMAND minix-v1-v2-module-test)
+ target_link_libraries(minix-common-v2-media-test PRIVATE InfiltratrCommon::Common)
+ target_compile_definitions(minix-common-v2-media-test PRIVATE IFS_TEST_COMMON_V2=1)
+ add_test(NAME minix-common-v2-disk-variants COMMAND minix-common-v2-media-test)
  add_test(NAME minix-production-v2-only
   COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_production_v2.sh"
           "$<TARGET_FILE:minix-driver>")

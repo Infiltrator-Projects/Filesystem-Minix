@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Build the production Common V2 MINIX.so, not the retired native drop-in ABI.
+# Build the production Common V2 MINIX.so and exercise native disk formats through V2.
 .PHONY: all test clean
 all:
 	cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
