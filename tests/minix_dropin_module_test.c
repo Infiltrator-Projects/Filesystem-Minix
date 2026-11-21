@@ -279,6 +279,22 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
            byte!='A')
             return fail("V2 native directory or file data mismatch");
+        /* All supported Minix disk variants must report a short
+         * STAT/LIST name buffer as NO_SPACE, leaving output untouched. */
+        {
+            char narrow[9] = {'X','X','X','X','X','X','X','X','X'};
+            const char untouched[9] = {'X','X','X','X','X','X','X','X','X'};
+            IfsFsEntryV2 small={0};
+            small.structure_bytes=sizeof(small);
+            small.name=narrow;
+            small.name_capacity=sizeof(narrow);
+            if(core->stat(opened,"/HELLO.TXT",&small)!=IFS_FS_NO_SPACE ||
+               memcmp(narrow,untouched,sizeof(narrow))!=0 ||
+               core->directory_entry(opened,"/",0u,&small)!=IFS_FS_NO_SPACE ||
+               memcmp(narrow,untouched,sizeof(narrow))!=0 ||
+               small.name_bytes!=0u)
+                return fail("Minix V2 short name buffer did not fail safely");
+        }
         /* Exact physical mapping via Common V2, paginated across the
          * direct and indirect Minix zone pointers on real synthetic media. */
         {
