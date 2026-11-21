@@ -103,8 +103,9 @@ static int probe(const IfsFsHostRuntimeV2 *h,uint32_t *variant)
     uint8_t superblock[64];
     uint16_t legacy_magic, v3_magic;
     int rc;
-    if(!variant || !host_ok(h))return IFS_FS_INVALID;
+    if(!variant)return IFS_FS_INVALID;
     *variant=0u;
+    if(!host_ok(h))return IFS_FS_INVALID;
     /* The V1/V2 and V3 Minix superblocks have distinct magic offsets.
      * First inspect the on-disk identity through the V2 host, so absence,
      * corruption and block transport errors are distinguishable. */
