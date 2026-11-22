@@ -279,6 +279,29 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
            byte!='A')
             return fail("V2 native directory or file data mismatch");
+        /* A second fully valid dirent with the same exact name must not
+         * let either the native reader or Common V2 silently choose an
+         * inode. Minix disk versions V1/V2/V3 all use this same decoder.
+         * Modifications affect only the test's disposable in-memory disk. */
+        {
+            const uint32_t stride=volume.directory_bytes;
+            uint8_t *root_bytes=disk+4u*BS;
+            uint8_t *fourth=disk+8u*BS+3u*stride;
+            const uint32_t root_size_at=version==1u?4u:8u;
+            put_directory(disk+8u*BS,version,stride,3u,2u,"HELLO.TXT");
+            w32(root_bytes+root_size_at,4u*stride);
+            root.size_bytes=4u*stride;
+            if(api->lookup(&volume,&root,"HELLO.TXT",9u,&dent)!=-1 ||
+               core->stat(opened,"/HELLO.TXT",&name_info)!=IFS_FS_CORRUPT ||
+               core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_CORRUPT)
+                return fail("V2 accepted duplicate native Minix pathname");
+            memset(fourth,0,stride);
+            w32(root_bytes+root_size_at,3u*stride);
+            root.size_bytes=3u*stride;
+            if(api->lookup(&volume,&root,"HELLO.TXT",9u,&dent)!=0 ||
+               core->stat(opened,"/HELLO.TXT",&name_info)!=IFS_FS_OK)
+                return fail("V2 did not recover after Minix duplicate removal");
+        }
         /* All supported Minix disk variants must report a short
          * STAT/LIST name buffer as NO_SPACE, leaving output untouched. */
         {
