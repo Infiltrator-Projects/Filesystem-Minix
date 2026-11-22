@@ -304,7 +304,8 @@ static int directory_lookup(const IfsMinixVolume *v,
                             const IfsMinixInode *dir, const char *name,
                             uint32_t name_length, IfsMinixDirent *out)
 {
-    IfsMinixDirent found;
+    IfsMinixDirent found, matched;
+    int have_match=0;
     if (!v || !dir || !name || !out || !name_length ||
         name_length > v->name_bytes ||
         (dir->mode & 0xf000u) != IFS_MINIX_MODE_DIRECTORY ||
@@ -317,8 +318,18 @@ static int directory_lookup(const IfsMinixVolume *v,
         while (i < name_length && found.name[i] == name[i] &&
                found.name[i]) ++i;
         if (i == name_length && found.name[i] == '\0') {
-            *out = found; return 0;
+            /* The native Minix directory key is case-sensitive and unique.
+             * A second exact name, including one in another zone, makes the
+             * V2 path ambiguous. Validate all occupied slots, not just the
+             * first match; retain the on-disk version-specific comparison. */
+            if (have_match) return -1;
+            matched=found;
+            have_match=1;
         }
+    }
+    if (have_match) {
+        *out=matched;
+        return 0;
     }
     return 1;
 }
