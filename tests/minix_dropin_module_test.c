@@ -46,8 +46,17 @@ static int io_flush(void *u)
 #ifdef IFS_TEST_COMMON_V2
 static uint32_t common_sector=512u;
 static uint64_t fail_read_at=UINT64_MAX;
+static const IfsFsCoreOpsV2 *unmount_during_read;
+static void *active_volume;
+static int observed_unmount;
 static int common_read(void *ctx,uint64_t at,void *dst,uint32_t length)
 {
+    if (unmount_during_read) {
+        const IfsFsCoreOpsV2 *ops=unmount_during_read;
+        unmount_during_read=NULL;
+        observed_unmount=ops->unmount(active_volume);
+        if (observed_unmount!=IFS_FS_BUSY) return -1;
+    }
     if(at==fail_read_at || at%common_sector ||
        length%common_sector || length>common_sector)
         return -1;
@@ -279,6 +288,12 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
            byte!='A')
             return fail("V2 native directory or file data mismatch");
+        active_volume=opened;
+        unmount_during_read=core;
+        observed_unmount=IFS_FS_INVALID;
+        if (core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
+            unmount_during_read || observed_unmount!=IFS_FS_BUSY)
+            return fail("reentrant unmount must report BUSY");
         /* A second fully valid dirent with the same exact name must not
          * let either the native reader or Common V2 silently choose an
          * inode. Minix disk versions V1/V2/V3 all use this same decoder.
