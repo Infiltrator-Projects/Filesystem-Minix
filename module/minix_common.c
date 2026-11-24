@@ -471,11 +471,133 @@ static const IfsFsCoreOpsV2 core={
     ,.write=write_file
 #endif
 };
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+/* Empty Minix V3 volume, using the same on-disk geometry as the native
+ * reader. Formatting is exclusively a provider operation. No pathname,
+ * external mkfs, kernel driver or retired ABI participates. */
+static void format_le16(uint8_t *p,uint32_t x)
+{ p[0]=(uint8_t)x; p[1]=(uint8_t)(x>>8); }
+static void format_le32(uint8_t *p,uint32_t x)
+{ format_le16(p,x); format_le16(p+2,x>>16); }
+
+static int format_v3(const IfsFsHostRuntimeV2 *h,uint32_t variant,
+                     const char *label,uint32_t flags)
+{
+    if(!host_ok(h))return IFS_FS_INVALID;
+    if((h->capabilities&IFS_FS_HOST_READ_ONLY) ||
+       !(h->capabilities&IFS_FS_HOST_EXCLUSIVE) ||
+       !(h->capabilities&IFS_FS_HOST_DURABLE))
+        return IFS_FS_ACCESS;
+    if(session.active)return IFS_FS_BUSY;
+    /* Minix has no volume label field. Only V3 creation is implemented;
+     * older on-disk variants remain readable. */
+    if(variant!=3u || flags || (label && *label))
+        return IFS_FS_UNSUPPORTED;
+    const uint32_t bs=h->logical_sector_bytes>1024u?
+                      h->logical_sector_bytes:1024u;
+    if(bs>4096u || h->volume_bytes%bs ||
+       h->volume_bytes/bs<64u || h->volume_bytes/bs>UINT32_MAX)
+        return IFS_FS_UNSUPPORTED;
+    const uint64_t zones=h->volume_bytes/bs;
+    const uint32_t bits=bs*8u;
+    /* Reserve roughly one inode per four zones; cap metadata so the
+     * 16-bit first-data-zone field remains representable. */
+    uint32_t inodes=(uint32_t)(zones/4u);
+    if(inodes>65520u)inodes=65520u;
+    if(inodes<16u)inodes=16u;
+    const uint32_t imap=(inodes+1u+bits-1u)/bits;
+    const uint32_t itable=(inodes*64u+bs-1u)/bs;
+    uint64_t zmap=(zones+bits-1u)/bits;
+    const uint64_t base=2u+imap+itable;
+    /* Find the smallest bitmap covering the data region, including its
+     * reserved bit zero. Its own size reduces the size of that region. */
+    while(zmap>1u && base+zmap-1u<zones &&
+          (zmap-1u)*bits>=zones-(base+zmap-1u)+1u)
+        --zmap;
+    const uint64_t first=base+zmap;
+    if(!zmap || zmap>UINT16_MAX || first>UINT16_MAX ||
+       first>=zones || zmap*bits<zones-first+1u)
+        return IFS_FS_UNSUPPORTED;
+
+    uint8_t block[4096]={0}, super[32]={0};
+    int rc;
+    /* Invalidate old superblock before any metadata mutation. A failure
+     * before the final publication leaves no new valid Minix signature. */
+    rc=ifs_fs_host_write_bytes_v2(h,0u,block,bs);
+    if(rc!=IFS_FS_OK)return rc;
+    rc=ifs_fs_host_write_bytes_v2(h,bs,block,bs);
+    if(rc!=IFS_FS_OK)return rc;
+    if(h->flush(h->context)!=0)return IFS_FS_IO_ERROR;
+
+    /* Bitmap bit zero and root inode/zone bit one are reserved. Bits
+     * outside the declared addressable range must never be allocatable. */
+    for(uint32_t kind=0u;kind<2u;++kind) {
+        const uint64_t count=kind?zmap:imap;
+        const uint64_t valid=kind?zones-first+1u:inodes+1u;
+        const uint64_t start=kind?2u+imap:2u;
+        for(uint64_t i=0u;i<count;++i) {
+            memset(block,0,bs);
+            if(!i)block[0]=3u;
+            for(uint32_t bit=0u;bit<bits;++bit)
+                if(i*bits+bit>=valid)
+                    block[bit/8u]|=(uint8_t)(1u<<(bit%8u));
+            rc=ifs_fs_host_write_bytes_v2(h,(start+i)*bs,block,bs);
+            if(rc!=IFS_FS_OK)return rc;
+        }
+    }
+    /* Root inode is the only allocated inode. Its single data zone
+     * contains the two required directory entries, "." and "..". */
+    for(uint32_t i=0u;i<itable;++i) {
+        memset(block,0,bs);
+        if(!i) {
+            format_le16(block,0040755u);
+            format_le16(block+2,2u);
+            format_le32(block+8,128u);
+            format_le32(block+24,(uint32_t)first);
+        }
+        rc=ifs_fs_host_write_bytes_v2(h,(2u+imap+zmap+i)*bs,block,bs);
+        if(rc!=IFS_FS_OK)return rc;
+    }
+    memset(block,0,bs);
+    format_le32(block,1u);block[4]='.';
+    format_le32(block+64,1u);block[68]='.';block[69]='.';
+    rc=ifs_fs_host_write_bytes_v2(h,first*bs,block,bs);
+    if(rc!=IFS_FS_OK)return rc;
+    if(h->flush(h->context)!=0)return IFS_FS_IO_ERROR;
+    format_le32(super,inodes);
+    format_le16(super+6,imap);
+    format_le16(super+8,(uint32_t)zmap);
+    format_le16(super+10,(uint32_t)first);
+    format_le32(super+16,UINT32_C(0x7fffffff));
+    format_le32(super+20,(uint32_t)zones);
+    format_le16(super+24,0x4d5au);
+    format_le16(super+28,bs);
+    rc=ifs_fs_host_write_bytes_v2(h,1024u,super,sizeof(super));
+    if(rc!=IFS_FS_OK)return rc;
+    if(h->flush(h->context)!=0) {
+        memset(super,0,sizeof(super));
+        (void)ifs_fs_host_write_bytes_v2(h,1024u,super,sizeof(super));
+        (void)h->flush(h->context);
+        return IFS_FS_IO_ERROR;
+    }
+    uint32_t observed=0u;
+    rc=probe(h,&observed);
+    return rc!=IFS_FS_OK?rc:observed==3u?IFS_FS_OK:IFS_FS_CORRUPT;
+}
+#endif /* hosted format */
+
 static const IfsFsVolumeOpsV2 volume_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsVolumeOpsV2),
              IFS_FS_GROUP_VOLUME,0u,
-             IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_SYNC},
+             IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_SYNC
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+             |IFS_FS_VOLUME_FORMAT
+#endif
+    },
     .query=volume_query,.sync=volume_sync
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+    ,.format=format_v3
+#endif
 };
 static const IfsFsGroupHeaderV2 *query_group(
     uint32_t id,uint32_t minimum,uint32_t maximum)

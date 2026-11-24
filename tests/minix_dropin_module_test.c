@@ -227,7 +227,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         if(!core || !core->probe || !core->mount || !core->unmount ||
            !core->stat || !core->directory_entry || !core->read || !core->write ||
            !volume_ops || !volume_ops->query || !volume_ops->sync ||
-           volume_ops->format || !defrag_map || !defrag_map->map ||
+           !volume_ops->format || !defrag_map || !defrag_map->map ||
            defrag_map->header.capabilities!=IFS_FS_DEFRAG_MAP ||
            defrag_map->plan || defrag_map->execute || defrag_map->verify ||
            defrag_map->recover || defrag_map->release_plan)
@@ -340,7 +340,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         if(core->write(opened,"/HELLO.TXT",0u,"X",1u)!=IFS_FS_ACCESS ||
            volume_ops->query(opened,&volume_info)!=IFS_FS_OK ||
            volume_info.variant!=version ||
-           volume_info.free_bytes!=2u*BS || volume_ops->format ||
+           volume_info.free_bytes!=2u*BS || !volume_ops->format ||
            core->create || core->truncate)
             return fail("V2 unsupported mutation capability falsely accepted");
         {
@@ -544,8 +544,79 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
     }
     return 0;
 }
+#ifdef IFS_TEST_COMMON_V2
+/* Unlike the existing-file writer test, this callback permits metadata
+ * writes only inside our disposable in-memory disk. */
+static int format_write(void *ctx,uint64_t at,const void *src,uint32_t n)
+{
+    (void)ctx;
+    if(at%common_sector || n%common_sector || n>common_sector ||
+       at>sizeof(disk) || n>sizeof(disk)-at)return -1;
+    memcpy(disk+(size_t)at,src,n);++writes;return 0;
+}
+static int test_format(void)
+{
+    const IfsFsModuleApiV2 *api=infiltrator_filesystem_api_v2();
+    const IfsFsCoreOpsV2 *core=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_CORE);
+    const IfsFsVolumeOpsV2 *vol=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_VOLUME);
+    if(!vol || !vol->format)return fail("missing V3 format");
+    for(uint32_t sector=512u;sector<=4096u;sector*=2u) {
+        common_sector=sector;fail_read_at=UINT64_MAX;
+        memset(disk,0xa5,sizeof(disk));writes=flushes=0;
+        IfsFsHostRuntimeV2 h={
+            .abi_version=IFS_FS_HOST_ABI_V2,.structure_bytes=sizeof(h),
+            .capabilities=IFS_FS_HOST_EXCLUSIVE|IFS_FS_HOST_DURABLE,
+            .volume_bytes=sizeof(disk),.logical_sector_bytes=sector,
+            .physical_sector_bytes=sector,.maximum_transfer_bytes=sector,
+            .read_at=common_read,.write_at=format_write,.flush=io_flush,
+            .allocate=common_alloc,.release=common_free
+        };
+        IfsFsHostRuntimeV2 ro=h;
+        ro.capabilities=IFS_FS_HOST_READ_ONLY;ro.write_at=NULL;ro.flush=NULL;
+        if(vol->format(&ro,3u,NULL,0u)!=IFS_FS_ACCESS ||
+           vol->format(&h,2u,NULL,0u)!=IFS_FS_UNSUPPORTED ||
+           vol->format(&h,3u,"unsupported label",0u)!=IFS_FS_UNSUPPORTED ||
+           writes || flushes)return fail("format rejected request wrote media");
+        if(sector==4096u) {
+            /* A 64 KiB fixture is too small for 64 4 KiB zones. */
+            if(vol->format(&h,3u,NULL,0u)!=IFS_FS_UNSUPPORTED || writes)
+                return fail("format accepted undersized geometry");
+            continue;
+        }
+        if(sector==2048u) {
+            if(vol->format(&h,3u,NULL,0u)!=IFS_FS_UNSUPPORTED || writes)
+                return fail("format accepted undersized geometry");
+            continue;
+        }
+        if(vol->format(&h,3u,NULL,0u)!=IFS_FS_OK || flushes<3u)
+            return fail("V3 format or publication");
+        uint32_t v=0;
+        IfsFsVolumeInfoV2 info={.structure_bytes=sizeof(info)};
+        void *m=NULL;
+        char name[64];
+        IfsFsEntryV2 root={.structure_bytes=sizeof(root),.name=name,
+                           .name_capacity=sizeof(name)};
+        if(core->probe(&ro,&v)!=IFS_FS_OK || v!=3u ||
+           core->mount(&ro,&m,&info)!=IFS_FS_OK || !m ||
+           info.variant!=3u || info.total_bytes!=sizeof(disk) ||
+           !info.free_bytes || info.free_bytes>=info.total_bytes ||
+           core->stat(m,"/",&root)!=IFS_FS_OK ||
+           root.type!=IFS_FS_ENTRY_DIRECTORY ||
+           core->directory_entry(m,"/",0u,&root)!=IFS_FS_END ||
+           vol->format(&h,3u,NULL,0u)!=IFS_FS_BUSY ||
+           core->unmount(m)!=IFS_FS_OK)return fail("formatted root validation");
+    }
+    common_sector=512u;
+    puts("MINIX V3 native format, read-only mount and empty namespace PASS");
+    return 0;
+}
+#endif
+
 int main(void)
 {
+#ifdef IFS_TEST_COMMON_V2
+    if(test_format())return 1;
+#endif
     if (run_variant(1u, 14u) || run_variant(1u, 30u) ||
         run_variant(2u, 14u) || run_variant(2u, 30u) ||
         run_variant(3u, 60u)) return 1;
