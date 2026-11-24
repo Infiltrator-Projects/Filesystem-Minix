@@ -146,6 +146,8 @@ static void fixture(uint32_t version, uint32_t namelen)
     file = root + inode_size;
     inode_init(root, version, 0x41edu, 3u * stride, 8u);
     inode_init(file, version, 0x81a4u, 9u*BS+5u, 10u);
+    if (version==1u) { w16(file+2u,1234u); file[12]=201u; }
+    else { w16(file+4u,1234u); w16(file+6u,4321u); }
     for (uint32_t i = 0u; i < 7u; ++i)
         inode_zone(file, version, i, 10u + i);
     inode_zone(file, version, 7u, 24u);   /* single indirect */
@@ -227,7 +229,8 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            !ifs_fs_api_v2_valid(common,"minix") ||
            common->group_mask!=(IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
                                  IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
-                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)) ||
+                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)|
+                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_METADATA)) ||
            (common->runtime_profiles & IFS_FS_PROFILE_KERNEL))
             return fail("strict Common V2 ABI or host invalid");
         core=(const IfsFsCoreOpsV2 *)ifs_fs_group_v2(common,IFS_FS_GROUP_CORE);
@@ -288,6 +291,15 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            core->read(opened,"/HELLO.TXT",0u,&byte,1u)!=IFS_FS_OK ||
            byte!='A')
             return fail("V2 native directory or file data mismatch");
+        const IfsFsMetadataOpsV2 *meta=(const void *)ifs_fs_group_v2(common,IFS_FS_GROUP_METADATA);
+        IfsFsMetadataV2 metadata={.structure_bytes=sizeof(metadata)};
+        if (!meta || !meta->get || meta->set ||
+            meta->header.capabilities!=IFS_FS_META_GET_MODE ||
+            meta->get(opened,"/HELLO.TXT",&metadata)!=IFS_FS_OK ||
+            metadata.mask!=IFS_FS_META_GET_MODE || metadata.mode!=0100644u ||
+            metadata.owner!=1234u || metadata.group!=(version==1u?201u:4321u) ||
+            meta->get(opened,"/ABSENT",&metadata)!=IFS_FS_NOT_FOUND)
+            return fail("Common V2 native Minix ownership or mode mismatch");
         active_volume=opened;
         unmount_during_read=core;
         observed_unmount=IFS_FS_INVALID;

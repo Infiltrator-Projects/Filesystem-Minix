@@ -155,6 +155,9 @@ static int get_inode(const IfsMinixVolume *v, uint32_t number, IfsMinixInode *ou
     if (read_at(v, pos, raw, v->inode_bytes) != 0) return -1;
     out->inode_number = number;
     out->mode = u16(raw);
+    /* V1 stores a 16-bit UID and 8-bit GID; V2/V3 store both as 16-bit. */
+    out->uid = u16(raw + (v->version == 1u ? 2u : 4u));
+    out->gid = v->version == 1u ? raw[12] : u16(raw + 6u);
     out->size_bytes = u32(raw + (v->version == 1u ? 4u : 8u));
     if (out->size_bytes > v->max_file_bytes) return -1;
     for (uint32_t j = 0; j < 10u; ++j) {

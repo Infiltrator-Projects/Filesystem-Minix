@@ -691,6 +691,28 @@ static const IfsFsVolumeOpsV2 volume_ops={
     ,.format=guarded_format_v3
 #endif
 };
+/* Report real native ownership and mode, never synthetic POSIX defaults.
+ * Minix disk versions differ in ownership width and have no birth time. */
+static int metadata_get(void *volume,const char *path,IfsFsMetadataV2 *out)
+{
+    if (!out || out->structure_bytes<sizeof(*out)) return IFS_FS_INVALID;
+    if (!v2_enter_operation()) return IFS_FS_BUSY;
+    if (!live(volume)) return v2_leave_operation(IFS_FS_INVALID);
+    last_read_error=IFS_FS_OK;
+    IfsMinixInode inode;
+    int rc=resolve(path,&inode,NULL,NULL);
+    if (rc==IFS_FS_OK)
+        *out=(IfsFsMetadataV2){.structure_bytes=sizeof(*out),
+            .mask=IFS_FS_META_GET_MODE,.mode=inode.mode,
+            .owner=inode.uid,.group=inode.gid};
+    return v2_leave_operation(rc);
+}
+static const IfsFsMetadataOpsV2 metadata_ops={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(metadata_ops),
+             IFS_FS_GROUP_METADATA,0u,IFS_FS_META_GET_MODE},
+    .get=metadata_get
+};
+
 static const IfsFsGroupHeaderV2 *query_group(
     uint32_t id,uint32_t minimum,uint32_t maximum)
 {
@@ -699,6 +721,7 @@ static const IfsFsGroupHeaderV2 *query_group(
     if(id==IFS_FS_GROUP_CORE)return &core.header;
     if(id==IFS_FS_GROUP_VOLUME)return &volume_ops.header;
     if(id==IFS_FS_GROUP_DEFRAG)return &defrag_map_ops.header;
+    if(id==IFS_FS_GROUP_METADATA)return &metadata_ops.header;
     return NULL;
 }
 __attribute__((used,section(".ifsmeta")))
@@ -712,7 +735,8 @@ static const IfsFsModuleApiV2 api={
 #endif
     IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
         IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
-        IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG),query_group
+        IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)|
+        IFS_FS_GROUP_BIT(IFS_FS_GROUP_METADATA),query_group
 };
 __attribute__((visibility("default")))
 const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void)

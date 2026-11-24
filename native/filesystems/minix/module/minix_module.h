@@ -31,6 +31,7 @@ typedef struct {
     uint32_t inode_number, size_bytes;
     uint16_t mode;
     uint32_t zone[10];
+    uint32_t uid, gid; /* Decoded native ownership; internal engine only. */
 } IfsMinixInode;
 typedef struct {
     uint32_t inode_number;
