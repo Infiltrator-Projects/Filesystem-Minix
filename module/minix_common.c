@@ -347,6 +347,7 @@ static int fill(IfsFsEntryV2 *out,const IfsMinixInode *inode,
     if(!out || out->structure_bytes<sizeof(*out) ||
        !out->name || !name)
         return IFS_FS_INVALID;
+    out->name_bytes=0u;
     /* An otherwise valid STAT/LIST request needs a larger caller buffer.
      * Return capacity failure without writing a partial name or metadata. */
     if(bytes>=out->name_capacity)
@@ -457,6 +458,9 @@ static int write_file(void *volume,const char *path,uint64_t at,
        !(session.host.capabilities & IFS_FS_HOST_DURABLE) ||
        !session.host.write_at || !session.host.flush)
         return IFS_FS_ACCESS;
+    /* Read errors belong to the current operation, not the previously
+     * failed request on this mounted volume. */
+    last_read_error=IFS_FS_OK;
     rc=resolve(path,&inode,NULL,NULL);
     if(rc)return rc;
     if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR)
@@ -468,7 +472,8 @@ static int write_file(void *volume,const char *path,uint64_t at,
     io.flush=host_flush;
     return ifs_minix_native_write_ops()->overwrite_existing(
         &io,&session.media,&inode,at,data,length)==0?
-        IFS_FS_OK:IFS_FS_IO_ERROR;
+        IFS_FS_OK:
+        last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_IO_ERROR;
 }
 static int guarded_write_file(void *volume,const char *path,uint64_t at,
                       const void *data,uint32_t length)

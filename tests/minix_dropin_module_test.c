@@ -338,6 +338,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
             small.structure_bytes=sizeof(small);
             small.name=narrow;
             small.name_capacity=sizeof(narrow);
+            small.name_bytes=99u;
             if(core->stat(opened,"/HELLO.TXT",&small)!=IFS_FS_NO_SPACE ||
                memcmp(narrow,untouched,sizeof(narrow))!=0 ||
                core->directory_entry(opened,"/",0u,&small)!=IFS_FS_NO_SPACE ||
@@ -387,7 +388,25 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
         volume_info.structure_bytes=sizeof(volume_info);
         if(core->mount(&host,&opened,&volume_info)!=IFS_FS_OK || !opened ||
            opened==old) return fail("V2 exclusive mount failed");
+        /* Faulted inode lookup must propagate I/O, but a later
+         * checksummed-independent structural failure must not inherit it. */
         writes=flushes=0u;
+        fail_read_at=4u*BS;
+        if(core->write(opened,"/HELLO.TXT",0u,"X",1u)!=IFS_FS_IO_ERROR ||
+           writes) return fail("V2 write lookup lost native I/O status");
+        fail_read_at=UINT64_MAX;
+        {
+            const uint32_t stride=volume.directory_bytes;
+            uint8_t *root_bytes=disk+4u*BS;
+            uint8_t *fourth=disk+8u*BS+3u*stride;
+            const uint32_t root_size_at=version==1u?4u:8u;
+            put_directory(disk+8u*BS,version,stride,3u,2u,"HELLO.TXT");
+            w32(root_bytes+root_size_at,4u*stride);
+            if(core->write(opened,"/HELLO.TXT",0u,"X",1u)!=IFS_FS_CORRUPT ||
+               writes) return fail("V2 write inherited stale I/O status");
+            memset(fourth,0,stride);
+            w32(root_bytes+root_size_at,3u*stride);
+        }
         if(core->write(opened,"/HELLO.TXT",7u*BS-3u,"wXYZfoo",7u)!=IFS_FS_OK ||
            !writes || !flushes ||
            core->read(opened,"/HELLO.TXT",7u*BS-3u,
