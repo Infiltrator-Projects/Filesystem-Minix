@@ -230,6 +230,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            common->group_mask!=(IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
                                  IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
                                  IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)|
+                                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_ALLOCATION)|
                                  IFS_FS_GROUP_BIT(IFS_FS_GROUP_METADATA)) ||
            (common->runtime_profiles & IFS_FS_PROFILE_KERNEL))
             return fail("strict Common V2 ABI or host invalid");

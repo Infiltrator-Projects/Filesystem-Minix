@@ -867,6 +867,90 @@ static int guarded_map_file(void *volume,const char *path,uint64_t first,
 
 #if !defined(IFS_MINIX_FIRMWARE_BUILD)
 #include "minix_relocation.h"
+/* Walk a verified native bitmap, including bytes outside the data heap. */
+static int bitmap_page(uint64_t first,uint64_t limit,uint64_t base,uint64_t end,
+                       uint32_t unit,const uint8_t *bitmap,
+                       IfsFsAllocationRangeV2 *ranges,uint32_t capacity,uint32_t *written)
+{
+    uint64_t at=first;
+    if(at==limit)return IFS_FS_END;
+    while(at<limit && *written<capacity){
+        uint64_t next;uint32_t state;
+        if(at<base){next=base;state=IFS_FS_SPACE_RESERVED;}
+        else if(at>=end){next=limit;state=IFS_FS_SPACE_RESERVED;}
+        else {
+            uint32_t b=(uint32_t)((at-base)/unit);
+            int used=mr_test_bit(bitmap,b+1u);
+            state=used?IFS_FS_SPACE_ALLOCATED:IFS_FS_SPACE_FREE;
+            ++b;
+            while((uint64_t)b*unit<end-base && (mr_test_bit(bitmap,b+1u))==used)++b;
+            next=base+(uint64_t)b*unit;
+        }
+        ranges[(*written)++]=(IfsFsAllocationRangeV2){at,next-at,state,0u};
+        at=next;
+    }
+    return IFS_FS_OK;
+}
+static int allocation_map(void *volume,uint64_t first,IfsFsAllocationRangeV2 *ranges,
+                          uint32_t capacity,uint32_t *written)
+{
+    if(!written)return IFS_FS_INVALID;
+    *written=0u;
+    if(!v2_enter_operation())return IFS_FS_BUSY;
+    const IfsMinixVolume *v=&session.media;const IfsFsHostRuntimeV2 *h=&session.host;
+    if(!live(volume)||!ranges||!capacity||first>h->volume_bytes)
+        return v2_leave_operation(IFS_FS_INVALID);
+    if(session.reloc_state!=1 || session.write_fault)return v2_leave_operation(IFS_FS_UNSUPPORTED);
+    uint32_t bs=v->block_bytes,ib=v->inode_count/8u+1u,zb=(v->zone_count-v->first_data_zone)/8u+1u;
+    uint8_t *imap=h->allocate(h->context,ib),*zmap=h->allocate(h->context,zb),
+            *owned=h->allocate(h->context,zb);
+    int rc=IFS_FS_NO_MEMORY;
+    if(!imap||!zmap||!owned)goto done;
+    memset(owned,0,zb);
+    rc=mr_read((uint64_t)2u*bs,imap,ib);
+    if(rc==IFS_FS_OK)rc=mr_read((uint64_t)(2u+v->bitmap_inode_blocks)*bs,zmap,zb);
+    if(rc!=IFS_FS_OK)goto done;
+    if(!(zmap[0]&1u)){rc=IFS_FS_CORRUPT;goto done;}
+    for(uint32_t ino=1u;ino<=v->inode_count;++ino){
+        if(mr_cancelled()){rc=IFS_FS_BUSY;goto done;}
+        if(!mr_test_bit(imap,ino))continue;
+        IfsMinixInode f;
+        if(native()->inode(v,ino,&f)!=0){rc=IFS_FS_CORRUPT;goto done;}
+        uint16_t mode=f.mode&0xf000u;
+        if(mode!=IFS_MINIX_MODE_REGULAR && mode!=IFS_MINIX_MODE_DIRECTORY &&
+           mode!=IFS_MINIX_MODE_SYMLINK){
+            if(f.size_bytes){rc=IFS_FS_UNSUPPORTED;goto done;}
+            continue;
+        }
+        for(unsigned i=0;i<10u;++i){
+            rc=mr_claim(f.zone[i],i<7u?0u:i-6u,zmap,owned);
+            if(rc!=IFS_FS_OK)goto done;
+        }
+    }
+    uint64_t free_zones=0u;
+    for(uint32_t zone=v->first_data_zone;zone<v->zone_count;++zone){
+        uint32_t bit=zone-v->first_data_zone+1u;
+        if(mr_test_bit(zmap,bit)!=mr_test_bit(owned,bit)){rc=IFS_FS_CORRUPT;goto done;}
+        if(!mr_test_bit(zmap,bit))++free_zones;
+    }
+    if(free_zones!=session.verified_free_zones || (uint64_t)v->zone_count*bs>h->volume_bytes){
+        rc=IFS_FS_CORRUPT;goto done;
+    }
+    rc=bitmap_page(first,h->volume_bytes,(uint64_t)v->first_data_zone*bs,
+                   (uint64_t)v->zone_count*bs,bs,zmap,ranges,capacity,written);
+done:
+    if(imap)h->release(h->context,imap);
+    if(zmap)h->release(h->context,zmap);
+    if(owned)h->release(h->context,owned);
+    if(rc!=IFS_FS_OK)*written=0u;
+    return v2_leave_operation(rc);
+}
+static const IfsFsAllocationOpsV2 allocation_group={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsAllocationOpsV2),
+             IFS_FS_GROUP_ALLOCATION,0u,IFS_FS_ALLOCATION_ALL},
+    .map=allocation_map
+};
+
 #endif
 static const IfsFsDefragOpsV2 defrag_map_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsDefragOpsV2),
@@ -1074,6 +1158,9 @@ static const IfsFsGroupHeaderV2 *query_group(
     if(id==IFS_FS_GROUP_CORE)return &core.header;
     if(id==IFS_FS_GROUP_VOLUME)return &volume_ops.header;
     if(id==IFS_FS_GROUP_DEFRAG)return &defrag_map_ops.header;
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+    if(id==IFS_FS_GROUP_ALLOCATION)return &allocation_group.header;
+#endif
     if(id==IFS_FS_GROUP_METADATA)return &metadata_ops.header;
     return NULL;
 }
@@ -1089,6 +1176,9 @@ static const IfsFsModuleApiV2 api={
     IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
         IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
         IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)|
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+        IFS_FS_GROUP_BIT(IFS_FS_GROUP_ALLOCATION)|
+#endif
         IFS_FS_GROUP_BIT(IFS_FS_GROUP_METADATA),query_group
 };
 __attribute__((visibility("default")))
