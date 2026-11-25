@@ -414,7 +414,7 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
                       bytes,7u)!=IFS_FS_OK ||
            memcmp(bytes,"wXYZfoo",7u))
             return fail("Strict V2 bounded native write/read mismatch");
-        if(core->write(opened,"/HELLO.TXT",9u*BS+5u,"X",1u)!=IFS_FS_UNSUPPORTED ||
+        if(core->write(opened,"/HELLO.TXT",9u*BS+6u,"X",1u)!=IFS_FS_UNSUPPORTED ||
            core->write(opened,"/../HELLO.TXT",0u,"X",1u)!=IFS_FS_INVALID ||
            volume_ops->sync(opened)!=IFS_FS_OK ||
            core->unmount(opened)!=IFS_FS_OK ||
