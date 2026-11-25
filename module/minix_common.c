@@ -35,7 +35,15 @@ static struct {
     uint64_t verified_free_zones;
     uint32_t allocation_hint;
     int write_fault;
+    int reloc_state;
+    void *reloc_plan;
+    uintptr_t reloc_token;
+    uint64_t mount_recovered;
 } session;
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+static int mr_mount(void);
+static void mr_drop_plan(void);
+#endif
 /* The native parser's callback is boolean, but Common V2 must preserve
  * transport errors instead of reporting a missing file or corrupt media. */
 static int last_read_error = IFS_FS_OK;
@@ -252,6 +260,15 @@ static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
     session.allocation_hint=session.media.first_data_zone+1u;
     session.write_fault=0;
     session.active=++session.generation;
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+    int journal_rc=mr_mount();
+    if(journal_rc!=IFS_FS_OK){
+        session.active=0u;
+        memset(&session.host,0,sizeof(session.host));
+        memset(&session.media,0,sizeof(session.media));
+        return journal_rc;
+    }
+#endif
     describe(info);
     *out=(void *)session.active;
     return IFS_FS_OK;
@@ -267,6 +284,9 @@ static int guarded_mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
 static int unmount_volume(void *volume)
 {
     if(!live(volume))return IFS_FS_INVALID;
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+    mr_drop_plan();
+#endif
     session.active=0u;
     memset(&session.host,0,sizeof(session.host));
     memset(&session.media,0,sizeof(session.media));
@@ -484,7 +504,8 @@ static int mut_allowed(void *volume)
     if((session.host.capabilities&IFS_FS_HOST_READ_ONLY) ||
        !(session.host.capabilities&IFS_FS_HOST_EXCLUSIVE) ||
        !(session.host.capabilities&IFS_FS_HOST_DURABLE))return IFS_FS_ACCESS;
-    if(session.write_fault)return IFS_FS_IO_ERROR;
+    if(session.write_fault || session.reloc_state==2)return IFS_FS_IO_ERROR;
+    if(session.reloc_plan)return IFS_FS_BUSY;
     if(session.media.version!=3u)return IFS_FS_UNSUPPORTED;
     return IFS_FS_OK;
 }
@@ -766,7 +787,8 @@ static int write_file(void *volume,const char *path,uint64_t at,
     if(rc)return rc;
     if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR)
         return IFS_FS_INVALID;
-    if(session.write_fault)return IFS_FS_IO_ERROR;
+    if(session.write_fault || session.reloc_state==2)return IFS_FS_IO_ERROR;
+    if(session.reloc_plan)return IFS_FS_BUSY;
     if(at>inode.size_bytes)return IFS_FS_UNSUPPORTED;
     if(length>inode.size_bytes-at)
         return grow_file(volume,&inode,at,data,length);
@@ -843,10 +865,23 @@ static int guarded_map_file(void *volume,const char *path,uint64_t first,
     return v2_leave_operation(map_file(volume,path,first,out,capacity,written));
 }
 
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+#include "minix_relocation.h"
+#endif
 static const IfsFsDefragOpsV2 defrag_map_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsDefragOpsV2),
-             IFS_FS_GROUP_DEFRAG,0u,IFS_FS_DEFRAG_MAP},
+             IFS_FS_GROUP_DEFRAG,0u,
+#if defined(IFS_MINIX_FIRMWARE_BUILD)
+             IFS_FS_DEFRAG_MAP},
+#else
+             IFS_FS_DEFRAG_ALL},
+#endif
     .map=guarded_map_file
+#if !defined(IFS_MINIX_FIRMWARE_BUILD)
+    ,.plan=guarded_mr_plan,.execute=guarded_mr_execute,
+    .verify=guarded_mr_verify,.recover=guarded_mr_recover,
+    .release_plan=guarded_mr_release
+#endif
 };
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
@@ -960,6 +995,13 @@ static int format_v3(const IfsFsHostRuntimeV2 *h,uint32_t variant,
     rc=ifs_fs_host_write_bytes_v2(h,first*bs,block,bs);
     if(rc!=IFS_FS_OK)return rc;
     if(h->flush(h->context)!=0)return IFS_FS_IO_ERROR;
+    if(h->logical_sector_bytes<=1024u) {
+        uint8_t journal[MR_JOURNAL_BYTES];
+        mr_encode(journal,(uint32_t)zones,bs,NULL);
+        rc=ifs_fs_host_write_bytes_v2(h,0u,journal,sizeof journal);
+        if(rc!=IFS_FS_OK)return rc;
+        if(h->flush(h->context)!=0)return IFS_FS_IO_ERROR;
+    }
     format_le32(super,inodes);
     format_le16(super+6,imap);
     format_le16(super+8,(uint32_t)zmap);

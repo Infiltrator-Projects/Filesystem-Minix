@@ -240,9 +240,9 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            !core->stat || !core->directory_entry || !core->read || !core->write ||
            !volume_ops || !volume_ops->query || !volume_ops->sync ||
            !volume_ops->format || !defrag_map || !defrag_map->map ||
-           defrag_map->header.capabilities!=IFS_FS_DEFRAG_MAP ||
-           defrag_map->plan || defrag_map->execute || defrag_map->verify ||
-           defrag_map->recover || defrag_map->release_plan)
+           defrag_map->header.capabilities!=IFS_FS_DEFRAG_ALL ||
+           !defrag_map->plan || !defrag_map->execute || !defrag_map->verify ||
+           !defrag_map->recover || !defrag_map->release_plan)
             return fail("Missing strict V2 functionality or false capability");
         /* A true host transport failure is not a missing filesystem.
          * The failed 512-byte transfer must propagate through V2. */
@@ -672,6 +672,23 @@ static int test_format(void)
         if(map->map(m,"/A.BIN",0,ext,2,&n)!=IFS_FS_OK || n!=2 ||
            ext[1].physical_offset==ext[0].physical_offset+ext[0].length ||
            core->unmount(m)!=IFS_FS_OK)return fail("V3 real fragmented extents");
+        for(uint32_t policy=0u;policy<=10u;policy+=10u) {
+            if(core->mount(&h,&m,&info)!=IFS_FS_OK)return fail("relocation mount");
+            void *plan=NULL;uint64_t moved=0u,repaired=UINT64_MAX;
+            if(map->plan(m,"/",policy,&plan)!=IFS_FS_OK || !plan ||
+               map->execute(m,plan,&moved)!=IFS_FS_OK || !moved ||
+               map->verify(m,plan)!=IFS_FS_OK)return fail("native V3 relocation");
+            map->release_plan(m,plan);
+            if(map->recover(m,0u,&repaired)!=IFS_FS_OK || repaired ||
+               map->map(m,"/A.BIN",0,ext,2,&n)!=IFS_FS_OK || n!=2 ||
+               ext[1].physical_offset!=ext[0].physical_offset+ext[0].length ||
+               core->read(m,"/A.BIN",sizeof(data),copy,sizeof(copy))!=IFS_FS_OK ||
+               memcmp(data,copy,sizeof(data)) ||
+               core->read(m,"/B.BIN",0,copy,sizeof(copy))!=IFS_FS_OK ||
+               memcmp(data,copy,sizeof(data)) ||
+               vol->query(m,&info)!=IFS_FS_OK || info.free_bytes!=initial-3u*sizeof(data) ||
+               core->unmount(m)!=IFS_FS_OK)return fail("V3 relocation integrity");
+        }
     }
     common_sector=512u;
     puts("MINIX V3 native format, read-only mount and empty namespace PASS");
