@@ -601,6 +601,77 @@ static int format_write(void *ctx,uint64_t at,const void *src,uint32_t n)
        at>sizeof(disk) || n>sizeof(disk)-at)return -1;
     memcpy(disk+(size_t)at,src,n);++writes;return 0;
 }
+/* Simulated power loss: only bytes present at the last successful
+ * flush survive. Inject a failure at every individual host write and
+ * flush boundary, then discard the module session and remount. */
+static uint8_t durable_image[sizeof disk],relocation_baseline[sizeof disk];
+static uint32_t fault_event,fault_at;
+static int interrupted_write(void *ctx,uint64_t at,const void *src,uint32_t n)
+{
+    if(++fault_event==fault_at)return -1;
+    return format_write(ctx,at,src,n);
+}
+static int interrupted_flush(void *ctx)
+{
+    if(++fault_event==fault_at)return -1;
+    memcpy(durable_image,disk,sizeof disk);
+    return io_flush(ctx);
+}
+static int test_relocation_interruptions(const IfsFsCoreOpsV2 *core,
+    const IfsFsVolumeOpsV2 *vol,const IfsFsDefragOpsV2 *map,
+    const IfsFsHostRuntimeV2 *normal,uint64_t expected_free,
+    const uint8_t data[1024])
+{
+    IfsFsHostRuntimeV2 interrupted=*normal;
+    interrupted.write_at=interrupted_write;interrupted.flush=interrupted_flush;
+    memcpy(relocation_baseline,disk,sizeof disk);
+    for(uint32_t policy=0u;policy<=10u;policy+=10u) {
+        uint32_t events=0u;
+        for(uint32_t trial=0u;trial<=events;++trial) {
+            memcpy(disk,relocation_baseline,sizeof disk);
+            memcpy(durable_image,disk,sizeof disk);
+            fault_event=0u;fault_at=trial?trial:UINT32_MAX;
+            IfsFsVolumeInfoV2 info={.structure_bytes=sizeof(info)};
+            void *m=NULL,*plan=NULL;uint64_t moved=0u,repaired=0u;
+            if(core->mount(&interrupted,&m,&info)!=IFS_FS_OK ||
+               map->plan(m,"/",policy,&plan)!=IFS_FS_OK || !plan)
+                return fail("interruption fixture planning");
+            int rc=map->execute(m,plan,&moved);
+            if(!trial) {
+                if(rc!=IFS_FS_OK || !moved || map->verify(m,plan)!=IFS_FS_OK)
+                    return fail("uninterrupted reference relocation");
+                events=fault_event;
+                if(!events || events>512u)return fail("invalid relocation event count");
+            }else if(rc==IFS_FS_OK)return fail("fault injection did not interrupt relocation");
+            map->release_plan(m,plan);
+            if(core->unmount(m)!=IFS_FS_OK)return fail("discard interrupted session");
+            if(!trial)continue;
+            memcpy(disk,durable_image,sizeof disk);
+            fault_at=UINT32_MAX;
+            if(core->mount(normal,&m,&info)!=IFS_FS_OK ||
+               map->recover(m,0u,&repaired)!=IFS_FS_OK ||
+               map->recover(m,0u,&repaired)!=IFS_FS_OK || repaired ||
+               vol->query(m,&info)!=IFS_FS_OK || info.free_bytes!=expected_free)
+                return fail("interruption recovery or allocation accounting");
+            uint8_t copy[1024];
+            for(uint32_t k=0u;k<2u;++k)
+                if(core->read(m,"/A.BIN",(uint64_t)k*sizeof copy,copy,sizeof copy)!=IFS_FS_OK ||
+                   memcmp(copy,data,sizeof copy))return fail("interrupted A payload");
+            if(core->read(m,"/B.BIN",0,copy,sizeof copy)!=IFS_FS_OK ||
+               memcmp(copy,data,sizeof copy))return fail("interrupted B payload");
+            plan=NULL;
+            if(map->plan(m,"/",policy,&plan)!=IFS_FS_OK || !plan ||
+               map->execute(m,plan,&moved)!=IFS_FS_OK ||
+               map->verify(m,plan)!=IFS_FS_OK)return fail("relocation after recovery");
+            map->release_plan(m,plan);
+            if(core->unmount(m)!=IFS_FS_OK)return fail("recovery unmount");
+        }
+    }
+    memcpy(disk,relocation_baseline,sizeof disk);
+    fault_at=UINT32_MAX;
+    puts("MINIX native relocation write/flush interruption recovery PASS");
+    return 0;
+}
 static int test_format(void)
 {
     const IfsFsModuleApiV2 *api=infiltrator_filesystem_api_v2();
@@ -672,6 +743,9 @@ static int test_format(void)
         if(map->map(m,"/A.BIN",0,ext,2,&n)!=IFS_FS_OK || n!=2 ||
            ext[1].physical_offset==ext[0].physical_offset+ext[0].length ||
            core->unmount(m)!=IFS_FS_OK)return fail("V3 real fragmented extents");
+        if(test_relocation_interruptions(core,vol,map,&h,
+                                         initial-3u*sizeof(data),data))
+            return 1;
         for(uint32_t policy=0u;policy<=10u;policy+=10u) {
             if(core->mount(&h,&m,&info)!=IFS_FS_OK)return fail("relocation mount");
             void *plan=NULL;uint64_t moved=0u,repaired=UINT64_MAX;
