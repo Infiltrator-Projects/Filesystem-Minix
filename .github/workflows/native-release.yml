@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build tools and pinned Common dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential binutils cmake git pkg-config libssl-dev libsqlite3-dev dpkg-dev
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential binutils cmake git pkg-config libssl-dev libsqlite3-dev dpkg-dev util-linux
       - name: Qualify portable Debian and embed exact source into native RUN
         run: |
           set -euo pipefail
@@ -45,6 +45,25 @@ jobs:
           test -s "$RUNNER_TEMP/installed/System/Filesystems/$FS_SO"
           test -s "$RUNNER_TEMP/installed/System/Resources/Documentation/$FS_REPO.pdf"
           readelf -Ws "$RUNNER_TEMP/installed/System/Filesystems/$FS_SO" | grep -F "$FS_ABI"
+      - name: Verify fragmented 200 MiB corpus using both packaged native modules
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          mkdir -p "$work/include/infiltratr" "$work/portable"
+          curl -fsSL https://raw.githubusercontent.com/Infiltrator-Projects/Libraries/d23a52693fd3212368d327e1c1302e07ae9510ec/include/infiltratr/filesystem_module_v2.h -o "$work/include/infiltratr/filesystem_module_v2.h"
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I"$work/include" tests/test_corpus.c -ldl -o "$work/corpus"
+          dpkg-deb -x dist/*.deb "$work/portable"
+          for root in "$work/portable" "$RUNNER_TEMP/installed"; do
+            for sector in 512 4096; do
+              "$work/corpus" "$root/System/Filesystems/MINIX.so" "$work/media.img" "$sector"
+              if [ "$sector" = 512 ]; then
+                # util-linux fsck.minix checks conventional 1 KiB Minix media.
+                fsck.minix -f "$work/media.img"
+              fi
+              rm "$work/media.img"
+            done
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: native-filesystem-release
