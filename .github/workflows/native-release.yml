@@ -15,16 +15,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build tools and pinned Common dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential binutils cmake git pkg-config libssl-dev libsqlite3-dev dpkg-dev util-linux
-      - name: Qualify portable Debian and embed exact source into native RUN
+      - name: Qualify portable Debian and generate revision-pinned source-first native RUN
         run: |
           set -euo pipefail
           python3 -m py_compile standalone/build.py standalone/release.py
           python3 standalone/release.py release
+          bootstrap="$(find dist -maxdepth 1 -type f -name '*.run' -print -quit)"
+          test -s "$bootstrap"
+          test "$(wc -c < "$bootstrap")" -lt 8192
+          if grep -aF '__IFS_SOURCE_PAYLOAD_BELOW__' "$bootstrap"; then exit 1; fi
+          grep -F "$GITHUB_SHA" "$bootstrap"
           python3 standalone/check-package.py dist/*.deb --profile portable
           sudo python3 standalone/check-documentation-upgrade.py dist/*.deb
           test "$(find dist -name '*.deb' | wc -l)" = 1
           test "$(find dist -name '*.run' | wc -l)" = 1
-      - name: Prove source-embedded RUN creates CPU-native Debian with one SO and PDF
+      - name: Prove source-first RUN creates CPU-native Debian with one SO and PDF
         run: |
           set -euo pipefail
           FS_SO="$(python3 -c 'import json; print(json.load(open("standalone/config.json"))["module"])')"
@@ -123,14 +128,15 @@ jobs:
           fi
           (cd dist && sha256sum -- *.deb *.run > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
           if ! gh release view "$tag" --json tagName >/dev/null 2>&1; then
-            gh release create "$tag" dist/*.deb dist/*.run dist/SHA256SUMS.txt \
+            gh release create "$tag" dist/*.deb dist/*.run \
               --target "$GITHUB_SHA" \
               --title "Common V2-only MINIX filesystem $version" \
               --notes "Verified Common V2 hosted and freestanding filesystem reader, self-contained Common V2 ELF, real native filesystem media and freestanding reader validation. One MINIX.so provides the canonical engine in both profiles. Includes Debian package and CPU-native source RUN. No filesystem-specific Linux kernel driver is delivered."
           fi
           remote="$RUNNER_TEMP/MINIX-release-check"
           mkdir -p "$remote"
-          gh release download "$tag" --dir "$remote"
+          gh release download "$tag" -p '*.deb' -p '*.run' --dir "$remote"
+          cp dist/SHA256SUMS.txt "$remote/"
           diff -qr dist "$remote"
           (cd "$remote" && sha256sum -c SHA256SUMS.txt)
           echo "MINIX_COMMON_V2_IMMUTABLE_RELEASE_PASS $tag $GITHUB_SHA"
