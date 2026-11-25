@@ -56,7 +56,7 @@ jobs:
           work=$(mktemp -d)
           trap 'rm -rf "$work"' EXIT
           mkdir -p "$work/include/infiltratr" "$work/portable"
-          curl -fsSL https://raw.githubusercontent.com/Infiltrator-Projects/Libraries/d23a52693fd3212368d327e1c1302e07ae9510ec/include/infiltratr/filesystem_module_v2.h -o "$work/include/infiltratr/filesystem_module_v2.h"
+          curl -fsSL https://raw.githubusercontent.com/Infiltrator-Projects/Libraries/965e5d191a6f7d078f5d07218dbaabfb00fa1a20/include/infiltratr/filesystem_module_v2.h -o "$work/include/infiltratr/filesystem_module_v2.h"
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I"$work/include" tests/test_corpus.c -ldl -o "$work/corpus"
           dpkg-deb -x dist/*.deb "$work/portable"
           for root in "$work/portable" "$RUNNER_TEMP/installed"; do
