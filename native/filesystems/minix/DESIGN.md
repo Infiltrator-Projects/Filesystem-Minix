@@ -1,5 +1,13 @@
 # Minix filesystem — implementation and qualification
 
+## Current production architecture
+
+The independent `MINIX.so` is the canonical installed filesystem provider. The hosted descriptor declares probe, mount, stat, directory enumeration, read, write, create and V3 format. Writable operations check exclusive durable host access. The canonical entry point is `infiltrator_filesystem_api_v2`. Consumers must negotiate the actual profile and operation masks and use bounded, partition-relative host I/O. A source-level callback does not by itself establish that every format variant or host profile is qualified.
+
+The hosted and freestanding profiles are qualified separately. Only the shared object and its technical PDF are installed by the filesystem package; the native RUN downloads its exact source revision. No separate per-format kernel or EFI driver or FUSE substitute is a production delivery path. See the [current README](../../../README.md) and [migration evidence](../../../MIGRATION_STATUS.md) for exact scope and qualification. The inherited design and source-ownership record below is historical where it describes older source layouts, implementation status or adapters; it remains valuable for format semantics and attribution.
+
+## Historical design and source record
+
 ## Format and source authority
 
 Minix V1, V2 and V3 are variants of one on-disk filesystem identity,
