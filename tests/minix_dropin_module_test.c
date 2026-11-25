@@ -754,6 +754,21 @@ static int test_format(void)
                map->execute(m,plan,&moved)!=IFS_FS_OK || !moved ||
                map->verify(m,plan)!=IFS_FS_OK)return fail("native V3 relocation");
             map->release_plan(m,plan);
+            const IfsFsAllocationOpsV2 *allocation=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_ALLOCATION);
+            if(!allocation || !allocation->map)return fail("missing native allocation map");
+            uint64_t cursor=0u,unknown=0u,free_bytes=0u;
+            for(unsigned page=0u;;++page){
+                IfsFsAllocationRangeV2 ranges[8];uint32_t count=0u;uint64_t next=0u;
+                if(page>=65536u)return fail("allocation paging did not terminate");
+                int status=allocation->map(m,cursor,ranges,8u,&count);
+                if(!ifs_fs_allocation_page_v2_valid(h.volume_bytes,cursor,status,ranges,8u,count,&next,&unknown))
+                    return fail("malformed native allocation map");
+                for(uint32_t k=0u;k<count;++k)if(ranges[k].state==IFS_FS_SPACE_FREE)free_bytes+=ranges[k].length;
+                cursor=next;
+                if(status==IFS_FS_END)break;
+            }
+            if(cursor!=h.volume_bytes || unknown || free_bytes!=initial-3u*sizeof(data))
+                return fail("native allocation map does not reconcile with volume accounting");
             if(map->recover(m,0u,&repaired)!=IFS_FS_OK || repaired ||
                map->map(m,"/A.BIN",0,ext,2,&n)!=IFS_FS_OK || n!=2 ||
                ext[1].physical_offset!=ext[0].physical_offset+ext[0].length ||
