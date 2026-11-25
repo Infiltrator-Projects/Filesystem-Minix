@@ -369,7 +369,8 @@ static int run_variant(uint32_t version, uint32_t name_bytes)
            volume_ops->query(opened,&volume_info)!=IFS_FS_OK ||
            volume_info.variant!=version ||
            volume_info.free_bytes!=2u*BS || !volume_ops->format ||
-           core->create || core->truncate)
+           !core->create || core->truncate ||
+           core->create(opened,"/NEW.TXT",IFS_FS_ENTRY_FILE)!=IFS_FS_ACCESS)
             return fail("V2 unsupported mutation capability falsely accepted");
         {
             void *duplicate=NULL;
@@ -651,6 +652,26 @@ static int test_format(void)
            core->directory_entry(m,"/",0u,&root)!=IFS_FS_END ||
            vol->format(&h,3u,NULL,0u)!=IFS_FS_BUSY ||
            core->unmount(m)!=IFS_FS_OK)return fail("formatted root validation");
+        if(vol->format(&h,0u,"LD_MINIX",0u)!=IFS_FS_OK ||
+           core->mount(&h,&m,&info)!=IFS_FS_OK)return fail("default format");
+        uint8_t data[1024],copy[1024];memset(data,0x37,sizeof(data));
+        const uint64_t initial=info.free_bytes;
+        if(core->create(m,"/A.BIN",IFS_FS_ENTRY_FILE)!=IFS_FS_OK ||
+           core->create(m,"/B.BIN",IFS_FS_ENTRY_FILE)!=IFS_FS_OK ||
+           core->create(m,"/A.BIN",IFS_FS_ENTRY_FILE)!=IFS_FS_EXISTS ||
+           core->write(m,"/A.BIN",0,data,sizeof(data))!=IFS_FS_OK ||
+           core->write(m,"/B.BIN",0,data,sizeof(data))!=IFS_FS_OK ||
+           core->write(m,"/A.BIN",sizeof(data),data,sizeof(data))!=IFS_FS_OK ||
+           vol->query(m,&info)!=IFS_FS_OK || info.free_bytes!=initial-3u*sizeof(data) ||
+           core->unmount(m)!=IFS_FS_OK ||
+           core->mount(&ro,&m,&info)!=IFS_FS_OK ||
+           core->read(m,"/A.BIN",sizeof(data),copy,sizeof(copy))!=IFS_FS_OK ||
+           memcmp(data,copy,sizeof(data)))return fail("V3 persistent interleaved append");
+        const IfsFsDefragOpsV2 *map=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG);
+        IfsFsExtentV2 ext[2];uint32_t n=0;
+        if(map->map(m,"/A.BIN",0,ext,2,&n)!=IFS_FS_OK || n!=2 ||
+           ext[1].physical_offset==ext[0].physical_offset+ext[0].length ||
+           core->unmount(m)!=IFS_FS_OK)return fail("V3 real fragmented extents");
     }
     common_sector=512u;
     puts("MINIX V3 native format, read-only mount and empty namespace PASS");

@@ -33,6 +33,8 @@ static struct {
     IfsFsHostRuntimeV2 host;
     IfsMinixVolume media;
     uint64_t verified_free_zones;
+    uint32_t allocation_hint;
+    int write_fault;
 } session;
 /* The native parser's callback is boolean, but Common V2 must preserve
  * transport errors instead of reporting a missing file or corrupt media. */
@@ -247,6 +249,8 @@ static int mount_volume(const IfsFsHostRuntimeV2 *h,void **out,
         session.verified_free_zones=0u;
         return bitmap_rc;
     }
+    session.allocation_hint=session.media.first_data_zone+1u;
+    session.write_fault=0;
     session.active=++session.generation;
     describe(info);
     *out=(void *)session.active;
@@ -446,6 +450,303 @@ static int guarded_read_file(void *volume,const char *path,uint64_t at,
 }
 
 #if !defined(IFS_MINIX_FIRMWARE_BUILD)
+/* V3 non-journalled allocation transaction. Stage complete filesystem
+ * blocks, including their original contents, before touching the medium.
+ * Ordinary I/O failures roll back all attempted writes; a failed rollback
+ * poisons the mounted writer. This is not a power-loss journal. Allocation
+ * deliberately continues at the next free zone, so interleaved appends
+ * create genuine noncontiguous extents without manufacturing fake maps. */
+enum { MUT_PATCH_LIMIT=192, MUT_APPEND_LIMIT=65536 };
+typedef struct {
+    uint32_t block;
+    uint8_t *before,*after;
+    int dirty;
+} MutPatch;
+typedef struct {
+    MutPatch patch[MUT_PATCH_LIMIT];
+    unsigned count;
+    uint32_t hint;
+    uint32_t allocated;
+} Mutation;
+static uint32_t mut_get32(const uint8_t *p)
+{
+    return (uint32_t)p[0]|((uint32_t)p[1]<<8)|
+           ((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+}
+static void mut_put16(uint8_t *p,uint32_t x)
+{p[0]=(uint8_t)x;p[1]=(uint8_t)(x>>8);}
+static void mut_put32(uint8_t *p,uint32_t x)
+{mut_put16(p,x);mut_put16(p+2,x>>16);}
+static uint32_t mut_blocksize(void){return session.media.block_bytes;}
+static int mut_allowed(void *volume)
+{
+    if(!live(volume))return IFS_FS_INVALID;
+    if((session.host.capabilities&IFS_FS_HOST_READ_ONLY) ||
+       !(session.host.capabilities&IFS_FS_HOST_EXCLUSIVE) ||
+       !(session.host.capabilities&IFS_FS_HOST_DURABLE))return IFS_FS_ACCESS;
+    if(session.write_fault)return IFS_FS_IO_ERROR;
+    if(session.media.version!=3u)return IFS_FS_UNSUPPORTED;
+    return IFS_FS_OK;
+}
+static void mut_release(Mutation *t)
+{
+    for(unsigned i=0;i<t->count;++i)
+        session.host.release(session.host.context,t->patch[i].before);
+}
+static int mut_patch(Mutation *t,uint32_t block,MutPatch **out)
+{
+    if(block>=session.media.zone_count)return IFS_FS_CORRUPT;
+    for(unsigned i=0;i<t->count;++i)
+        if(t->patch[i].block==block){*out=&t->patch[i];return IFS_FS_OK;}
+    if(t->count>=MUT_PATCH_LIMIT)return IFS_FS_NO_MEMORY;
+    const uint32_t bs=mut_blocksize();
+    uint8_t *mem=session.host.allocate(session.host.context,2u*bs);
+    if(!mem)return IFS_FS_NO_MEMORY;
+    int rc=ifs_fs_host_read_bytes_v2(&session.host,(uint64_t)block*bs,mem,bs);
+    if(rc!=IFS_FS_OK){session.host.release(session.host.context,mem);return rc;}
+    memcpy(mem+bs,mem,bs);
+    MutPatch *p=&t->patch[t->count++];
+    *p=(MutPatch){.block=block,.before=mem,.after=mem+bs};
+    *out=p;return IFS_FS_OK;
+}
+static int mut_commit(Mutation *t)
+{
+    const IfsFsHostRuntimeV2 *h=&session.host;
+    const uint32_t bs=mut_blocksize();
+    unsigned attempted=0;
+    int rc=IFS_FS_OK;
+    if(t->allocated>session.verified_free_zones)return IFS_FS_CORRUPT;
+    for(unsigned i=0;i<t->count;++i) {
+        if(!t->patch[i].dirty)continue;
+        if(h->cancelled && h->cancelled(h->context)){rc=IFS_FS_BUSY;break;}
+        attempted=i+1u;
+        rc=ifs_fs_host_write_bytes_v2(h,(uint64_t)t->patch[i].block*bs,
+                                      t->patch[i].after,bs);
+        if(rc!=IFS_FS_OK)break;
+    }
+    if(rc==IFS_FS_OK && h->flush(h->context)!=0)rc=IFS_FS_IO_ERROR;
+    if(rc!=IFS_FS_OK) {
+        int failed=0;
+        while(attempted) {
+            MutPatch *p=&t->patch[--attempted];
+            if(p->dirty && ifs_fs_host_write_bytes_v2(h,(uint64_t)p->block*bs,
+                                      p->before,bs)!=IFS_FS_OK)failed=1;
+        }
+        if(h->flush(h->context)!=0)failed=1;
+        if(failed)session.write_fault=1;
+        return rc;
+    }
+    session.verified_free_zones-=t->allocated;
+    session.allocation_hint=t->hint;
+    return IFS_FS_OK;
+}
+/* The two allocation maps have distinct origins. For zmap, bit one
+ * represents the first data zone; inode bit zero is also reserved. */
+static int mut_bit(Mutation *t,int zone,uint32_t bit,int set,int *allocated)
+{
+    const IfsMinixVolume *v=&session.media;
+    const uint32_t bits=v->block_bytes*8u;
+    const uint32_t count=zone?v->bitmap_zone_blocks:v->bitmap_inode_blocks;
+    const uint32_t base=2u+(zone?v->bitmap_inode_blocks:0u);
+    if(bit/bits>=count)return IFS_FS_CORRUPT;
+    MutPatch *p;
+    int rc=mut_patch(t,base+bit/bits,&p);
+    if(rc!=IFS_FS_OK)return rc;
+    uint32_t local=bit%bits;
+    uint8_t mask=(uint8_t)(1u<<(local%8u));
+    *allocated=(p->after[local/8u]&mask)!=0u;
+    if(set && !*allocated){p->after[local/8u]|=mask;p->dirty=1;}
+    return IFS_FS_OK;
+}
+static int mut_alloc(Mutation *t,int zone,uint32_t *out)
+{
+    const IfsMinixVolume *v=&session.media;
+    const uint32_t lo=zone?v->first_data_zone:1u;
+    const uint32_t hi=zone?v->zone_count-1u:v->inode_count;
+    uint32_t start=zone?t->hint:2u;
+    if(start<lo || start>hi)start=lo;
+    uint32_t n=start;
+    do {
+        if(session.host.cancelled && session.host.cancelled(session.host.context))
+            return IFS_FS_BUSY;
+        int used=0;
+        int rc=mut_bit(t,zone,zone?n-lo+1u:n,1,&used);
+        if(rc!=IFS_FS_OK)return rc;
+        if(!used) {
+            *out=n;
+            if(zone) {
+                if(t->allocated>=session.verified_free_zones)return IFS_FS_CORRUPT;
+                ++t->allocated;
+                t->hint=n==hi?lo:n+1u;
+                MutPatch *p;
+                rc=mut_patch(t,n,&p);
+                if(rc!=IFS_FS_OK)return rc;
+                memset(p->after,0,v->block_bytes);p->dirty=1;
+            }
+            return IFS_FS_OK;
+        }
+        n=n==hi?lo:n+1u;
+    }while(n!=start);
+    return IFS_FS_NO_SPACE;
+}
+static int mut_inode(Mutation *t,uint32_t number,MutPatch **p,uint8_t **raw)
+{
+    const IfsMinixVolume *v=&session.media;
+    if(!number || number>v->inode_count)return IFS_FS_CORRUPT;
+    uint64_t at=(uint64_t)(number-1u)*64u;
+    int rc=mut_patch(t,v->inode_table_block+(uint32_t)(at/v->block_bytes),p);
+    if(rc==IFS_FS_OK)*raw=(*p)->after+at%v->block_bytes;
+    return rc;
+}
+static int mut_zone(Mutation *t,uint8_t *inode,uint64_t logical,
+                    int allocate,uint32_t *out)
+{
+    const uint64_t n=mut_blocksize()/4u;
+    unsigned levels=0;uint64_t indexes[3]={0};unsigned slot;
+    if(logical<7u)slot=(unsigned)logical;
+    else if((logical-=7u)<n){slot=7u;levels=1u;indexes[0]=logical;}
+    else if((logical-=n)<n*n){slot=8u;levels=2u;indexes[0]=logical/n;indexes[1]=logical%n;}
+    else if((logical-=n*n)<n*n*n) {
+        slot=9u;levels=3u;indexes[0]=logical/(n*n);
+        indexes[1]=(logical/n)%n;indexes[2]=logical%n;
+    } else return IFS_FS_NO_SPACE;
+    uint8_t *ptr=inode+24u+4u*slot;
+    MutPatch *owner=NULL;
+    for(unsigned level=0;;++level) {
+        uint32_t value=mut_get32(ptr);
+        if(!value) {
+            if(!allocate){*out=0;return IFS_FS_OK;}
+            int rc=mut_alloc(t,1,&value);
+            if(rc!=IFS_FS_OK)return rc;
+            mut_put32(ptr,value);
+            if(owner)owner->dirty=1;
+        } else {
+            if(value<session.media.first_data_zone || value>=session.media.zone_count)
+                return IFS_FS_CORRUPT;
+            int used=0;
+            int rc=mut_bit(t,1,value-session.media.first_data_zone+1u,0,&used);
+            if(rc!=IFS_FS_OK)return rc;
+            if(!used)return IFS_FS_CORRUPT;
+        }
+        if(level==levels){*out=value;return IFS_FS_OK;}
+        int rc=mut_patch(t,value,&owner);
+        if(rc!=IFS_FS_OK)return rc;
+        ptr=owner->after+4u*indexes[level];
+    }
+}
+static void mut_time(uint8_t *raw)
+{
+    uint64_t now=session.host.realtime_ns?
+        session.host.realtime_ns(session.host.context)/UINT64_C(1000000000):0;
+    if(now>UINT32_MAX)now=UINT32_MAX;
+    mut_put32(raw+16u,(uint32_t)now);
+    mut_put32(raw+20u,(uint32_t)now);
+}
+/* Append into ordinary existing directories, including growing the
+ * directory beyond its first zone. Directory records and inode bitmap
+ * changes become visible only after the complete staged operation. */
+static int create_file(void *volume,const char *path,uint32_t type)
+{
+    int rc=mut_allowed(volume);
+    if(rc!=IFS_FS_OK)return rc;
+    if(type!=IFS_FS_ENTRY_FILE)return IFS_FS_UNSUPPORTED;
+    if(!path || *path!='/' || !path[1])return IFS_FS_INVALID;
+    size_t len=strnlen(path,4096u);
+    if(len>=4096u)return IFS_FS_INVALID;
+    const char *name=strrchr(path,'/')+1;
+    size_t count=strlen(name);
+    if(!count || count>session.media.name_bytes ||
+       !strcmp(name,".") || !strcmp(name,".."))return IFS_FS_INVALID;
+    char parent[4096];
+    size_t prefix=(size_t)(name-path)-1u;
+    if(!prefix){parent[0]='/';parent[1]=0;}
+    else {memcpy(parent,path,prefix);parent[prefix]=0;}
+    IfsMinixInode dir;
+    last_read_error=IFS_FS_OK;
+    rc=resolve(parent,&dir,NULL,NULL);
+    if(rc!=IFS_FS_OK)return rc;
+    if((dir.mode&0xf000u)!=IFS_MINIX_MODE_DIRECTORY || dir.size_bytes%64u)
+        return IFS_FS_INVALID;
+    IfsMinixDirent existing;
+    int found=native()->lookup(&session.media,&dir,name,(uint32_t)count,&existing);
+    if(found==0)return IFS_FS_EXISTS;
+    if(found!=1)return last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;
+    Mutation *t=session.host.allocate(session.host.context,sizeof(*t));
+    if(!t)return IFS_FS_NO_MEMORY;
+    memset(t,0,sizeof(*t));t->hint=session.allocation_hint;
+    MutPatch *dp,*fp,*data;
+    uint8_t *d,*f;
+    uint32_t ino,zone;uint64_t at=dir.size_bytes;
+    uint8_t record[64];
+    for(uint64_t i=0;i<dir.size_bytes;i+=64u) {
+        if(native()->read(&session.media,&dir,i,record,sizeof(record))!=0) {
+            rc=last_read_error!=IFS_FS_OK?last_read_error:IFS_FS_CORRUPT;goto done;
+        }
+        if(!mut_get32(record)){at=i;break;}
+    }
+    if(at>session.media.max_file_bytes-64u){rc=IFS_FS_NO_SPACE;goto done;}
+    rc=mut_alloc(t,0,&ino);if(rc!=IFS_FS_OK)goto done;
+    rc=mut_inode(t,ino,&fp,&f);if(rc!=IFS_FS_OK)goto done;
+    memset(f,0,64);mut_put16(f,0100644u);mut_put16(f+2,1u);
+    mut_time(f);memcpy(f+12,f+16,4);fp->dirty=1;
+    rc=mut_inode(t,dir.inode_number,&dp,&d);if(rc!=IFS_FS_OK)goto done;
+    rc=mut_zone(t,d,at/mut_blocksize(),1,&zone);if(rc!=IFS_FS_OK)goto done;
+    rc=mut_patch(t,zone,&data);if(rc!=IFS_FS_OK)goto done;
+    uint8_t *entry=data->after+at%mut_blocksize();
+    memset(entry,0,64);mut_put32(entry,ino);memcpy(entry+4,name,count);
+    data->dirty=1;
+    if(at==dir.size_bytes)mut_put32(d+8,(uint32_t)(at+64u));
+    mut_time(d);dp->dirty=1;
+    rc=mut_commit(t);
+done:
+    mut_release(t);session.host.release(session.host.context,t);return rc;
+}
+static int guarded_create_file(void *volume,const char *path,uint32_t type)
+{
+    if(!v2_enter_operation())return IFS_FS_BUSY;
+    return v2_leave_operation(create_file(volume,path,type));
+}
+/* Extend a V3 regular file without holes. Direct, single, double and
+ * triple indirect pointers are allocated through the same bitmap.
+ * All bytes beyond the previous end of the file are zeroed before
+ * publication. Larger requests may be split by the caller. */
+static int grow_file(void *volume,const IfsMinixInode *inode,uint64_t at,
+                     const void *data,uint32_t length)
+{
+    int rc=mut_allowed(volume);
+    if(rc!=IFS_FS_OK)return rc;
+    if(at>inode->size_bytes || length>MUT_APPEND_LIMIT ||
+       at>session.media.max_file_bytes ||
+       length>session.media.max_file_bytes-at)return IFS_FS_UNSUPPORTED;
+    Mutation *t=session.host.allocate(session.host.context,sizeof(*t));
+    if(!t)return IFS_FS_NO_MEMORY;
+    memset(t,0,sizeof(*t));t->hint=session.allocation_hint;
+    MutPatch *ip;uint8_t *raw;
+    rc=mut_inode(t,inode->inode_number,&ip,&raw);
+    if(rc!=IFS_FS_OK)goto done;
+    const uint8_t *source=data;
+    const uint64_t end=at+length;
+    uint32_t bs=mut_blocksize();
+    while(length) {
+        uint32_t zone=0,within=(uint32_t)(at%bs),take=bs-within;
+        if(take>length)take=length;
+        rc=mut_zone(t,raw,at/bs,1,&zone);if(rc!=IFS_FS_OK)goto done;
+        MutPatch *p;rc=mut_patch(t,zone,&p);if(rc!=IFS_FS_OK)goto done;
+        if(at<inode->size_bytes && inode->size_bytes-at<take &&
+           within+(inode->size_bytes-at)<bs)
+            memset(p->after+within+(inode->size_bytes-at),0,
+                   bs-within-(size_t)(inode->size_bytes-at));
+        else if(at==inode->size_bytes && within)
+            memset(p->after+within,0,bs-within);
+        memcpy(p->after+within,source,take);p->dirty=1;
+        at+=take;source+=take;length-=take;
+    }
+    mut_put32(raw+8,(uint32_t)end);mut_time(raw);ip->dirty=1;
+    rc=mut_commit(t);
+done:
+    mut_release(t);session.host.release(session.host.context,t);return rc;
+}
+
 static int write_file(void *volume,const char *path,uint64_t at,
                       const void *data,uint32_t length)
 {
@@ -465,8 +766,10 @@ static int write_file(void *volume,const char *path,uint64_t at,
     if(rc)return rc;
     if((inode.mode&0xf000u)!=IFS_MINIX_MODE_REGULAR)
         return IFS_FS_INVALID;
-    if(at>inode.size_bytes || length>inode.size_bytes-at)
-        return IFS_FS_UNSUPPORTED;
+    if(session.write_fault)return IFS_FS_IO_ERROR;
+    if(at>inode.size_bytes)return IFS_FS_UNSUPPORTED;
+    if(length>inode.size_bytes-at)
+        return grow_file(volume,&inode,at,data,length);
     io.read=minix_io(&session.host);
     io.write_at=host_write;
     io.flush=host_flush;
@@ -552,13 +855,13 @@ static const IfsFsCoreOpsV2 core={
 #if defined(IFS_MINIX_FIRMWARE_BUILD)
              IFS_FS_CORE_LIST|IFS_FS_CORE_READ},
 #else
-             IFS_FS_CORE_LIST|IFS_FS_CORE_READ|IFS_FS_CORE_WRITE},
+             IFS_FS_CORE_LIST|IFS_FS_CORE_READ|IFS_FS_CORE_WRITE|IFS_FS_CORE_CREATE},
 #endif
     .probe=guarded_probe,.mount=guarded_mount_volume,.unmount=guarded_unmount_volume,
     .stat=guarded_stat_path,.directory_entry=guarded_directory_entry,
     .read=guarded_read_file
 #if !defined(IFS_MINIX_FIRMWARE_BUILD)
-    ,.write=guarded_write_file
+    ,.write=guarded_write_file,.create=guarded_create_file
 #endif
 };
 #if !defined(IFS_MINIX_FIRMWARE_BUILD)
@@ -581,8 +884,11 @@ static int format_v3(const IfsFsHostRuntimeV2 *h,uint32_t variant,
     if(session.active)return IFS_FS_BUSY;
     /* Minix has no volume label field. Only V3 creation is implemented;
      * older on-disk variants remain readable. */
-    if(variant!=3u || flags || (label && *label))
-        return IFS_FS_UNSUPPORTED;
+    /* Variant zero selects the native V3 default. A caller-supplied
+     * descriptive label on that default profile is ignored: Minix has no
+     * on-media label field. Explicit variant 3 retains its strict contract. */
+    if((variant!=0u && variant!=3u) || flags ||
+       (variant==3u && label && *label))return IFS_FS_UNSUPPORTED;
     const uint32_t bs=h->logical_sector_bytes>1024u?
                       h->logical_sector_bytes:1024u;
     if(bs>4096u || h->volume_bytes%bs ||
