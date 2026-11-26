@@ -29,8 +29,10 @@ The target installation is `/System/Filesystems/MINIX.so` and `/System/Resources
 - [Provider implementation](module/minix_common.c)
 - [Native design or source provenance](native/filesystems/minix/DESIGN.md)
 - [Migration and source history](MIGRATION_STATUS.md)
-- [Original-format reference source](docs/Minix.pages) and [PDF](docs/Minix.pdf)
+- [Original-format reference source](docs/Minix.pdfstreams) and [PDF](docs/Minix.pdf)
 - [Project philosophy](docs/PHILOSOPHY.md)
 - [Common ABI](https://github.com/Infiltrator-Projects/Libraries)
 
 The original-format reference and historical migration notes describe different evidence from the current production provider. When descriptions disagree, the current exported descriptor, implementation, executable tests and exact-revision release evidence take precedence.
+
+The [engineering reference](docs/Minix-TECHNICAL-REFERENCE.md) adds field-level original-format guidance. Earlier material is preserved in the PDF.
