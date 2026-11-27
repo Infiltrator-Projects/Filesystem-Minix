@@ -14,9 +14,12 @@ set_target_properties(minix-boot PROPERTIES
 target_compile_features(minix-boot PRIVATE c_std_11)
 target_include_directories(minix-boot PRIVATE "${COMMON_INCLUDE_DIR}")
 target_compile_definitions(minix-boot PRIVATE IFS_MINIX_FIRMWARE_BUILD=1)
+# Firmware uses AMD64 SysV without CET, SIMD state assumptions,
+# packed relative relocations or non-4-KiB load alignment. Hosted builds
+# retain their separate native optimization profile.
 target_compile_options(minix-boot PRIVATE
  -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin
- -fno-tree-loop-distribute-patterns -fno-stack-protector -mno-red-zone
+ -fno-tree-loop-distribute-patterns -fno-stack-protector -mno-red-zone -fcf-protection=none -mgeneral-regs-only
  -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
 target_link_options(minix-boot PRIVATE
- -nostdlib -Wl,-Bsymbolic,-z,defs,-z,noexecstack,-z,relro,-z,now)
+ -nostdlib -Wl,-z,nopack-relative-relocs,-z,max-page-size=4096,-Bsymbolic,-z,defs,-z,noexecstack,-z,relro,-z,now)
