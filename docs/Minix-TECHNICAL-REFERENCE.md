@@ -2,9 +2,9 @@
 
 ## History and revision discrimination
 
-MINIX introduced a compact inode-based Unix filesystem in 1987. V1 uses 16-bit zone addresses, V2 expands them to 32 bits, and V3 expands inode counts and directory identifiers and records its block size. The Linux v6.12 reference recognizes V1 magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16; V3 magic 0x4D5A is at byte 24. The two older magic variants select 14- or 30-byte names. This chapter describes little-endian media and the conventional zero log-zone-size profile; alternate byte order and nonzero zone shifts require version-specific validation. Read the superblock at partition byte 1024, not at a guessed offset based on the later block-size field.
+Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating system; its compact inode-based filesystem appeared in 1987. V1 uses 16-bit zone addresses, V2 expands them to 32 bits, and V3 expands inode counts and directory identifiers and records its block size. The Linux v6.12 reference recognizes V1 magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16; V3 magic 0x4D5A is at byte 24. The two older magic variants select 14- or 30-byte names. This chapter describes little-endian media and the conventional zero log-zone-size profile; alternate byte order and nonzero zone shifts require version-specific validation. Read the superblock at partition byte 1024, not at a guessed offset based on the later block-size field.
 
-Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating system. Its deliberately inspectable inode/zone model was also influential in early Linux before the ext family superseded it.
+Its deliberately inspectable inode/zone model was influential in early Linux before the ext family superseded it.
 
 ## Superblock binary fields
 

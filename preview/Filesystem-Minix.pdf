@@ -40,23 +40,23 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
 endobj
 9 0 obj
-<< /Length 1822 >>
+<< /Length 1806 >>
 stream
 0.06 0.15 0.23 rg 0 768 595 74 re f
 1 1 1 rg BT /F2 10 Tf 43 811 Td (INFILTRATOR / FILESYSTEM ENGINEERING) Tj ET
 BT /F2 22 Tf 43 784 Td (Minix - technical reference) Tj ET
 0.08 0.14 0.20 rg BT /F2 15 Tf 43 736 Td (1. History and revision discrimination) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 706 Td (MINIX introduced a compact inode-based Unix filesystem in 1987. V1 uses 16-bit zone) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 692 Td (addresses, V2 expands them to 32 bits, and V3 expands inode counts and directory) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 678 Td (identifiers and records its block size. The Linux v6.12 reference recognizes V1) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 664 Td (magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16; V3 magic 0x4D5A is) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 650 Td (at byte 24. The two older magic variants select 14- or 30-byte names. This chapter) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 636 Td (describes little-endian media and the conventional zero log-zone-size profile;) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 622 Td (alternate byte order and nonzero zone shifts require version-specific validation.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 608 Td (Read the superblock at partition byte 1024, not at a guessed offset based on the) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 594 Td (later block-size field.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 570 Td (Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating system.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 556 Td (Its deliberately inspectable inode/zone model was also influential in early Linux) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 706 Td (Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 692 Td (system; its compact inode-based filesystem appeared in 1987. V1 uses 16-bit) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 678 Td (zone addresses, V2 expands them to 32 bits, and V3 expands inode counts and) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 664 Td (directory identifiers and records its block size. The Linux v6.12 reference) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 650 Td (recognizes V1 magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16;) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 636 Td (V3 magic 0x4D5A is at byte 24. The two older magic variants select 14- or) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 622 Td (30-byte names. This chapter describes little-endian media and the conventional) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 608 Td (zero log-zone-size profile; alternate byte order and nonzero zone shifts) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 594 Td (require version-specific validation. Read the superblock at partition byte) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 580 Td (1024, not at a guessed offset based on the later block-size field.) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 556 Td (Its deliberately inspectable inode/zone model was influential in early Linux) Tj ET
 0.08 0.14 0.20 rg BT /F3 10 Tf 43 542 Td (before the ext family superseded it.) Tj ET
 0.2 0.3 0.4 rg BT /F1 9 Tf 43 32 Td (Historical development and engineering reference | 2) Tj ET
 endstream
@@ -253,24 +253,24 @@ xref
 0000000537 00000 n 
 0000001687 00000 n 
 0000001833 00000 n 
-0000003706 00000 n 
-0000003854 00000 n 
-0000005270 00000 n 
-0000005418 00000 n 
-0000006943 00000 n 
-0000007091 00000 n 
-0000008402 00000 n 
-0000008550 00000 n 
-0000010179 00000 n 
-0000010327 00000 n 
-0000011731 00000 n 
-0000011879 00000 n 
-0000013506 00000 n 
-0000013654 00000 n 
-0000015871 00000 n 
-0000016019 00000 n 
+0000003690 00000 n 
+0000003838 00000 n 
+0000005254 00000 n 
+0000005402 00000 n 
+0000006927 00000 n 
+0000007075 00000 n 
+0000008386 00000 n 
+0000008534 00000 n 
+0000010163 00000 n 
+0000010311 00000 n 
+0000011715 00000 n 
+0000011863 00000 n 
+0000013490 00000 n 
+0000013638 00000 n 
+0000015855 00000 n 
+0000016003 00000 n 
 trailer
 << /Size 26 /Root 1 0 R >>
 startxref
-17472
+17456
 %%EOF

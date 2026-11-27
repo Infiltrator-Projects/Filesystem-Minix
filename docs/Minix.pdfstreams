@@ -18,17 +18,17 @@ BT /F2 22 Tf 43 784 Td (Minix - technical reference) Tj ET
 1 1 1 rg BT /F2 10 Tf 43 811 Td (INFILTRATOR / FILESYSTEM ENGINEERING) Tj ET
 BT /F2 22 Tf 43 784 Td (Minix - technical reference) Tj ET
 0.08 0.14 0.20 rg BT /F2 15 Tf 43 736 Td (1. History and revision discrimination) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 706 Td (MINIX introduced a compact inode-based Unix filesystem in 1987. V1 uses 16-bit zone) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 692 Td (addresses, V2 expands them to 32 bits, and V3 expands inode counts and directory) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 678 Td (identifiers and records its block size. The Linux v6.12 reference recognizes V1) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 664 Td (magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16; V3 magic 0x4D5A is) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 650 Td (at byte 24. The two older magic variants select 14- or 30-byte names. This chapter) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 636 Td (describes little-endian media and the conventional zero log-zone-size profile;) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 622 Td (alternate byte order and nonzero zone shifts require version-specific validation.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 608 Td (Read the superblock at partition byte 1024, not at a guessed offset based on the) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 594 Td (later block-size field.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 570 Td (Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating system.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 556 Td (Its deliberately inspectable inode/zone model was also influential in early Linux) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 706 Td (Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 692 Td (system; its compact inode-based filesystem appeared in 1987. V1 uses 16-bit) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 678 Td (zone addresses, V2 expands them to 32 bits, and V3 expands inode counts and) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 664 Td (directory identifiers and records its block size. The Linux v6.12 reference) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 650 Td (recognizes V1 magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16;) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 636 Td (V3 magic 0x4D5A is at byte 24. The two older magic variants select 14- or) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 622 Td (30-byte names. This chapter describes little-endian media and the conventional) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 608 Td (zero log-zone-size profile; alternate byte order and nonzero zone shifts) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 594 Td (require version-specific validation. Read the superblock at partition byte) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 580 Td (1024, not at a guessed offset based on the later block-size field.) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 556 Td (Its deliberately inspectable inode/zone model was influential in early Linux) Tj ET
 0.08 0.14 0.20 rg BT /F3 10 Tf 43 542 Td (before the ext family superseded it.) Tj ET
 0.2 0.3 0.4 rg BT /F1 9 Tf 43 32 Td (Historical development and engineering reference | 2) Tj ET
 
