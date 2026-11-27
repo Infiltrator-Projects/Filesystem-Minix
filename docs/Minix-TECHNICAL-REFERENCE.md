@@ -4,6 +4,8 @@
 
 MINIX introduced a compact inode-based Unix filesystem in 1987. V1 uses 16-bit zone addresses, V2 expands them to 32 bits, and V3 expands inode counts and directory identifiers and records its block size. The Linux v6.12 reference recognizes V1 magic 0x137F/0x138F and V2 0x2468/0x2478 at superblock byte 16; V3 magic 0x4D5A is at byte 24. The two older magic variants select 14- or 30-byte names. This chapter describes little-endian media and the conventional zero log-zone-size profile; alternate byte order and nonzero zone shifts require version-specific validation. Read the superblock at partition byte 1024, not at a guessed offset based on the later block-size field.
 
+Andrew S. Tanenbaum designed MINIX as an educational Unix-like operating system. Its deliberately inspectable inode/zone model was also influential in early Linux before the ext family superseded it.
+
 ## Superblock binary fields
 
 V1/V2 offsets: 16-bit inode count 0, V1 zone count 2, inode-map blocks 4, zone-map blocks 6, first data zone 8, log zone size 10, 32-bit maximum file bytes 12, 16-bit magic 16 and state 18, V2 32-bit zone count 20. V3: 32-bit inode count 0, reserved 4, 16-bit inode-map blocks 6, zone-map blocks 8, first data zone 10, log zone size 12, reserved 14, maximum file bytes 16, zone count 20, magic 24, reserved 26, block bytes 28 and disk version 30. V1/V2 use 1024-byte blocks; V3 declares B. Verify power-of-two B, map capacity, first data zone and complete inode-table span. Reject geometry whose arithmetic exceeds the image.
@@ -28,6 +30,14 @@ V1/V2 entries are 16 or 32 bytes according to magic, with 16-bit inode at 0 and 
 
 Reserve a free inode and necessary zones, initialise data and pointer blocks, then publish namespace reachability. On extension reserve zones before publishing larger size; on deletion clear live pointers before release. V1/V2 state bits 1 and 2 represent valid and error state. The V3 header does not contain the same state field. None provides a general native transaction journal. Relocation copies and verifies bytes before switching the exact owner pointer, with metadata and bitmaps kept coherent. Failure can leak blocks or leave namespace damage, so never advertise all-or-nothing recovery without independent evidence. Formatter establishes all maps, root inode, dot entries and reserved bits, and must validate capacity.
 
+## Implementation and qualification boundary
+
+Historical source 161a8a61df42 declared hosted read, write, create and V3 format, with exclusive durable host access. Its V3 mutation path distinguished append at EOF from unsupported sparse writes. Do not generalize V3 formatting or append to V1/V2; general crash recovery and boot require separate evidence.
+
+Common V2 is the independent provider interface: https://github.com/Infiltrator-Projects/Libraries/blob/main/docs/FILESYSTEM_COMMON_ABI_V2.md . Negotiate real operation masks and media profiles. Use bounded host I/O, exclusive unmounted ownership and durable flush for mutation; distinguish unsupported, corrupt, I/O and stale-handle results. Test Media and Defragmenter use the same engine. Hosted, freestanding, BOOT, kernel, recovery and package qualification are independent. Current capability and release status belongs to the repository README and exact-source qualification records; historical evidence is not a current status claim.
+
+Historical source or test reference: https://github.com/Infiltrator-Projects/Filesystem-Minix/tree/161a8a61df42 .
+
 ## Independent validation and references
 
-Pinned definitions: https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/minix_fs.h . Algorithms: https://github.com/torvalds/linux/tree/v6.12/fs/minix (inode.c, bitmap.c, itree_v1.c, itree_v2.c, dir.c). Test native mkfs.minix and fsck.minix images for all magic variants, inode and zone bitmap boundaries, maximum-length names, direct/indirect/triple transitions, zero pointers, corrupt maps, and interrupted writes. Compare namespace and hashes with independent mounts. Verify alternate endian and nonzero zone-size profiles separately; this reference does not declare them qualified. The prior manual is retained as historical evidence, not a current implementation guarantee.
+Pinned definitions: https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/minix_fs.h . Algorithms: https://github.com/torvalds/linux/tree/v6.12/fs/minix (inode.c, bitmap.c, itree_v1.c, itree_v2.c, dir.c). Test native mkfs.minix and fsck.minix images for all magic variants, inode and zone bitmap boundaries, maximum-length names, direct/indirect/triple transitions, zero pointers, corrupt maps, and interrupted writes. Compare namespace and hashes with independent mounts. Verify alternate endian and nonzero zone-size profiles separately; this reference does not declare them qualified.
